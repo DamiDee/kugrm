@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    @apply bg-canvas text-ink-900 font-sans antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+    text-rendering: optimizeLegibility;
+    overflow-x: clip;
+  }
+  /* grid and flex children may shrink below their content, so long names truncate instead of pushing the page sideways */
+  .grid > *, .flex-1 { min-width: 0; }
+  img, svg, video { max-width: 100%; }
+  ::selection { background: #F5DFE5; color: #4D1528; }
+  :focus-visible { outline: 2px solid #93304E; outline-offset: 2px; border-radius: 6px; }
+  input, select, textarea, button { font: inherit; }
+  .tabular { font-variant-numeric: tabular-nums; }
+}
+
+@layer components {
+  .eyebrow { @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-500; }
+  .field {
+    @apply h-10 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink-900 placeholder:text-ink-400
+           transition-[border-color,box-shadow] duration-150 hover:border-line-strong
+           focus:border-wine-400 focus:outline-none focus:shadow-ring disabled:opacity-60;
+  }
+  .label { @apply mb-1.5 block text-[13px] font-medium text-ink-700; }
+  .hint { @apply mt-1.5 text-xs text-ink-500; }
+  .surface { @apply rounded-2xl border border-line bg-white; }
+  .glass { @apply border border-white/60 bg-white/70 backdrop-blur-xl; }
+  .divider { @apply border-t border-line; }
+  .kbd { @apply inline-flex h-5 min-w-5 items-center justify-center rounded border border-line bg-paper px-1 font-mono text-[10px] text-ink-500; }
+  /* notched tab cut into the top of a shell, as in the reference designs */
+  .notch { position: relative; }
+  .notch::before, .notch::after {
+    content: ''; position: absolute; top: 0; width: 24px; height: 24px; pointer-events: none;
+  }
+  .notch::before { left: -24px; background: radial-gradient(circle at 0 100%, transparent 23.5px, var(--notch, #F3F0EA) 24px); }
+  .notch::after { right: -24px; background: radial-gradient(circle at 100% 100%, transparent 23.5px, var(--notch, #F3F0EA) 24px); }
+  .scrollbar-thin { scrollbar-width: thin; scrollbar-color: #D6CFC3 transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}
