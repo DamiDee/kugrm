@@ -39,6 +39,12 @@
   }
   .notch::before { left: -24px; background: radial-gradient(circle at 0 100%, transparent 23.5px, var(--notch, #F3F0EA) 24px); }
   .notch::after { right: -24px; background: radial-gradient(circle at 100% 100%, transparent 23.5px, var(--notch, #F3F0EA) 24px); }
+  /* metallic gold lettering, as on the TGA flyers */
+  .tga-gold-text {
+    background: linear-gradient(180deg, #F9E4A8 0%, #E3BC63 38%, #B8862F 62%, #F0CF7C 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .tga-gold-bg { background: linear-gradient(135deg, #F6DD97 0%, #D9B45A 40%, #A9792B 100%); }
   .scrollbar-thin { scrollbar-width: thin; scrollbar-color: #D6CFC3 transparent; }
 }
 

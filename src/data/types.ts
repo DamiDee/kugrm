@@ -11,11 +11,25 @@ export interface Member {
   unit?: string
   status: 'active' | 'inactive'
   joinedYear?: number
+  /** coordinators oversee a set of zones; leaders oversee coordinators */
+  role?: MemberRole
+  /** for a coordinator: the leader they report to */
+  leaderId?: string
+  /** for a coordinator: the zones they oversee, by name ("Section 41", "Aisle 5", "Door X3"), in every session */
+  coordinates?: string[]
 }
+
+export type MemberRole = 'usher' | 'coordinator' | 'leader'
+export type SessionPeriod = 'morning' | 'evening'
 
 export type EventStatus = 'draft' | 'active' | 'completed' | 'archived'
 export type RosterStatus = 'draft' | 'published'
 
+/**
+ * One service the department rosters for. A multi-day programme such as TGA
+ * is one event per session (day × morning/evening), grouped by `series`, so
+ * each session has its own roster, reporting time and absences.
+ */
 export interface MinistryEvent {
   id: string
   name: string
@@ -23,7 +37,16 @@ export interface MinistryEvent {
   description?: string
   date: string // ISO date
   venue: string
-  reportingTime: string // "15:30"
+  /** groups the sessions of one programme, e.g. "TGA 2026" */
+  series?: string
+  /** day number within the series, 1-based */
+  day?: number
+  session?: SessionPeriod
+  /** when the service starts, "08:45" */
+  startTime?: string
+  /** when ushers must report, "07:30"; differs between morning and evening */
+  reportingTime: string
+  theme?: string
   briefingTime?: string
   dressCode?: string
   status: EventStatus
@@ -57,7 +80,12 @@ export interface Position {
   required?: number
   /** the usher spot on the floor plan this position stands at (one person) */
   spot?: SpotKey
+  /** what the people in this position do */
+  duty?: Duty
 }
+
+/** seat: an usher seat in a section; crowd: crowd control; greeter: welcomes people at doors and gates; door: door duty. */
+export type Duty = 'seat' | 'crowd' | 'greeter' | 'door' | 'lead' | 'protocol' | 'support'
 
 export interface Assignment {
   id: string
@@ -66,7 +94,9 @@ export interface Assignment {
   zoneId: string
   positionId: string
   isTeamLead: boolean
-  status: 'assigned' | 'confirmed'
+  /** unavailable: the usher said they can't make this session, so the spot is open for cover */
+  status: 'assigned' | 'confirmed' | 'unavailable'
+  unavailableReason?: string
   updatedAt: string
 }
 
@@ -75,7 +105,7 @@ export interface Activity {
   actor: string
   text: string
   at: string
-  kind: 'assign' | 'event' | 'import' | 'publish' | 'member' | 'position'
+  kind: 'assign' | 'event' | 'import' | 'publish' | 'member' | 'position' | 'absence' | 'team'
 }
 
 export interface AppNotification {

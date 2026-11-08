@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, CalendarDays, Clock3, LayoutGrid, MapPin, Pencil, Send, Shirt, Target } from 'lucide-react'
 import { useStore } from '@/store/useStore'
 import { positionsOf, spotOccupants, useEventData, useMemberMap } from '@/lib/selectors'
-import { formatDate, formatTime } from '@/lib/utils'
+import { formatDate, formatTime, sessionLine } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/Badge'
 import { EmptyState, MetricCard, ProgressBar } from '@/components/ui/misc'
@@ -35,11 +35,11 @@ export default function EventDetail() {
         <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2"><span className="font-mono text-xs text-ink-500">{event.code}</span><StatusBadge status={event.status} /><StatusBadge status={event.rosterStatus === 'published' ? 'published' : 'unpublished'} /></div>
-            <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.025em] text-ink-900">{event.name}</h1>
+            <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.025em] text-ink-900">{event.name}{sessionLine(event) && <span className="text-ink-400"> · {sessionLine(event)}</span>}</h1>
             <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-ink-500">
               <span className="flex items-center gap-1.5"><CalendarDays className="h-4 w-4" />{formatDate(event.date, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}</span>
               <span className="flex items-center gap-1.5"><MapPin className="h-4 w-4" />{event.venue}</span>
-              <span className="flex items-center gap-1.5"><Clock3 className="h-4 w-4" />Report {formatTime(event.reportingTime)}{event.briefingTime && ` · Briefing ${formatTime(event.briefingTime)}`}</span>
+              <span className="flex items-center gap-1.5"><Clock3 className="h-4 w-4" />Report {formatTime(event.reportingTime)}{event.briefingTime && ` · Briefing ${formatTime(event.briefingTime)}`}{event.startTime && ` · Service ${formatTime(event.startTime)}`}</span>
               {event.dressCode && <span className="flex items-center gap-1.5"><Shirt className="h-4 w-4" />{event.dressCode}</span>}
             </div>
           </div>

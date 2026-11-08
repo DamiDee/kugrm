@@ -5,6 +5,7 @@ export default {
     extend: {
       fontFamily: {
         sans: ['Manrope', 'Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        display: ['Oswald', '"Bebas Neue"', '"Arial Narrow"', 'Impact', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       colors: {
@@ -37,6 +38,8 @@ export default {
         bad: { 50: '#FDEEEC', 500: '#B42318', 600: '#912018' },
         floor: { light: '#EFE4D2', DEFAULT: '#E6D6BC', dark: '#CDB894' },
         wall: '#2A2622',
+        // The General Assembly brand, from the TGA 2026 flyers
+        tga: { black: '#0A0907', night: '#15120D', gold: '#D9B45A', 'gold-deep': '#A9792B', bronze: '#9C7440', cream: '#F6EBD3', red: '#E0262B' },
       },
       borderRadius: { xl2: '1.25rem', shell: '1.75rem' },
       boxShadow: {

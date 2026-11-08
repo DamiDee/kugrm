@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, CalendarClock, ChevronDown, History, Hourglass, Mail, PhoneOff, RotateCcw, Search, UserCheck } from 'lucide-react'
+import { ArrowLeft, CalendarClock, CalendarX2, ChevronDown, History, Hourglass, Mail, Phone, PhoneOff, RotateCcw, Search, Undo2, UserCheck } from 'lucide-react'
 import { useStore } from '@/store/useStore'
-import { lookupByPhone, positionsOf, spotOccupants, useEventData, useMemberMap, type AssignmentView, type LookupResult } from '@/lib/selectors'
-import { cn, formatDate, formatPhone, formatShortDate, formatTime, telHref } from '@/lib/utils'
-import { Logo, Segmented } from '@/components/ui/misc'
+import { lookupByPhone, positionsOf, spotOccupants, useEventData, useMemberMap, type AssignmentView, type LookupResult, type SessionEntry } from '@/lib/selectors'
+import { cn, eventLabel, formatDate, formatPhone, formatShortDate, formatTime, fullName, sessionLine, sessionShort, telHref, SESSION_LABEL } from '@/lib/utils'
+import { Field, Logo, Segmented } from '@/components/ui/misc'
+import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { toast } from '@/components/ui/Toast'
@@ -25,8 +26,9 @@ export default function AssignmentResult() {
   const assignments = useStore((s) => s.assignments)
   const events = useStore((s) => s.events)
   const activeEventId = useStore((s) => s.activeEventId)
+  const members = useStore((s) => s.members)
   const [ready, setReady] = useState(false)
-  const result = useMemo<LookupResult | null>(() => (phone ? lookupByPhone(phone) : null), [phone, assignments, events, activeEventId])
+  const result = useMemo<LookupResult | null>(() => (phone ? lookupByPhone(phone) : null), [phone, assignments, events, activeEventId, members])
 
   useEffect(() => {
     if (!phone) navigate('/', { replace: true })
@@ -64,42 +66,117 @@ function ResultSkeleton() {
 
 function ResultBody({ result }: { result: LookupResult }) {
   if (result.kind === 'not-found') return <NotFound phone={result.phone} />
-  if (result.kind === 'unpublished')
-    return (
-      <StateScreen
-        icon={<CalendarClock className="h-6 w-6" />}
-        badge="Roster Coming Soon"
-        title="Roster coming soon"
-        body={`The roster for ${result.event.name} has not been published yet. Check back closer to the event.`}
-        name={result.member.firstName}
-        others={result.others}
-      />
-    )
-  if (result.kind === 'unassigned')
-    return (
-      <StateScreen
-        icon={<Hourglass className="h-6 w-6" />}
-        badge="Awaiting Assignment"
-        title="Your roster is not available yet"
-        body={`We found your department profile, but you have not been assigned to a working position for ${result.event.code}.`}
-        name={result.member.firstName}
-        others={result.others}
-      />
-    )
-  return <Found result={result} />
+  return <MemberSessions result={result} />
 }
 
-function Found({ result }: { result: Extract<LookupResult, { kind: 'found' }> }) {
-  const { member, current, others } = result
+const today = () => new Date().toISOString().slice(0, 10)
+
+/** The usher's sessions in the current programme, one at a time. */
+function MemberSessions({ result }: { result: Extract<LookupResult, { kind: 'member' }> }) {
+  const { member, sessions, others } = result
+  const [params, setParams] = useSearchParams()
+  const activeEventId = useStore((s) => s.activeEventId)
+  const fallback =
+    sessions.find((x) => x.view && x.event.date >= today())?.event.id ??
+    sessions.find((x) => x.event.id === activeEventId)?.event.id ??
+    sessions[0]?.event.id
+  const selectedId = sessions.some((x) => x.event.id === params.get('s')) ? params.get('s')! : fallback
+  const entry = sessions.find((x) => x.event.id === selectedId) ?? sessions[0]
+  const pickSession = (id: string) => {
+    const next = new URLSearchParams(params)
+    next.set('s', id)
+    setParams(next, { replace: true })
+  }
+  const event = entry?.event
+  const view = entry?.view
+
+  return (
+    <div className="space-y-6">
+      <motion.div {...fade}>
+        <p className="text-sm text-ink-500">Welcome back</p>
+        <h1 className="mt-1 text-[30px] font-semibold tracking-[-0.025em] text-ink-900 sm:text-[34px]">Hello, {member.firstName} <span aria-hidden>👋</span></h1>
+        {event && (
+          <p className="mt-1.5 text-[15px] text-ink-500">
+            {event.name}{event.series && sessions.length > 1 ? `, ${formatDate(sessions[0].event.date, { day: 'numeric' })}–${formatDate(sessions[sessions.length - 1].event.date, { day: 'numeric', month: 'long', year: 'numeric' })}` : `, ${formatDate(event.date)}`}
+          </p>
+        )}
+      </motion.div>
+
+      {sessions.length > 1 && <SessionPicker sessions={sessions} value={selectedId} onChange={pickSession} />}
+
+      {event && event.rosterStatus !== 'published' ? (
+        <StatePanel
+          icon={<CalendarClock className="h-6 w-6" />}
+          badge="Roster coming soon"
+          title={`${sessionLine(event) || event.name}: roster coming soon`}
+          body="This session’s roster hasn’t been published yet. Check back closer to the day."
+          event={event}
+        />
+      ) : event && !view ? (
+        <StatePanel
+          icon={<Hourglass className="h-6 w-6" />}
+          badge="Not assigned"
+          title="You’re not on this session’s roster"
+          body={`We found your profile, but you don’t have a position for ${sessionShort(event)}. ${sessions.some((x) => x.view) ? 'Pick another session above to see where you serve.' : 'Your coordinator will let you know if that changes.'}`}
+          event={event}
+        />
+      ) : view && view.assignment.status === 'unavailable' ? (
+        <AwayPanel view={view} />
+      ) : view ? (
+        <Found view={view} />
+      ) : null}
+
+      {others.length > 0 && <OtherEvents others={others} />}
+    </div>
+  )
+}
+
+function SessionPicker({ sessions, value, onChange }: { sessions: SessionEntry[]; value?: string; onChange: (id: string) => void }) {
+  return (
+    <nav aria-label="Sessions" className="-mx-4 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
+      <ul className="flex gap-2">
+        {sessions.map(({ event, view }) => {
+          const on = event.id === value
+          const state = event.rosterStatus !== 'published' ? 'Soon' : !view ? 'Off' : view.assignment.status === 'unavailable' ? 'Away' : view.zone.name.replace('Section ', 'Sec ')
+          return (
+            <li key={event.id} className="shrink-0">
+              <button
+                onClick={() => onChange(event.id)}
+                aria-pressed={on}
+                className={cn(
+                  'flex min-h-[64px] w-[104px] flex-col items-start justify-center rounded-2xl px-3 py-2 text-left ring-1 transition-colors',
+                  on ? 'bg-ink-950 text-white ring-ink-950' : 'bg-white text-ink-800 ring-line hover:ring-line-strong',
+                )}
+              >
+                <span className={cn('text-[11px] font-semibold uppercase tracking-[0.08em]', on ? 'text-gold-300' : 'text-ink-500')}>
+                  {formatDate(event.date, { weekday: 'short', day: 'numeric' })}
+                </span>
+                <span className="text-[14px] font-semibold">{event.session ? SESSION_LABEL[event.session] : event.code}</span>
+                <span className={cn('mt-0.5 flex items-center gap-1 text-[11.5px]', on ? 'text-white/65' : 'text-ink-500')}>
+                  <span className={cn('h-1.5 w-1.5 rounded-full', state === 'Away' ? 'bg-bad-500' : state === 'Off' || state === 'Soon' ? 'bg-ink-300' : 'bg-ok-500')} />
+                  <span className="truncate">{state}</span>
+                </span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </nav>
+  )
+}
+
+function Found({ view }: { view: AssignmentView }) {
+  const current = view
   const zones = useStore((s) => s.zones)
   const settings = useStore((s) => s.settings)
   const confirmAssignment = useStore((s) => s.confirmAssignment)
   const [showAll, setShowAll] = useState(false)
+  const [away, setAway] = useState(false)
   const eventZones = zones.filter((z) => z.eventId === current.event.id)
   const data = useEventData(current.event.id)
   const memberMap = useMemberMap()
   const occupants = useMemo(() => spotOccupants(data, memberMap, current.zone.id), [data, memberMap, current.zone.id])
-  const team = current.teammates
+  const team = current.teammates.filter((t) => t.isYou || data.assignments.some((a) => a.memberId === t.member.id))
   const visible = showAll ? team : team.slice(0, 8)
 
   // group teammates by position for larger teams
@@ -114,22 +191,21 @@ function Found({ result }: { result: Extract<LookupResult, { kind: 'found' }> })
 
   return (
     <div className="space-y-8">
-      <motion.div {...fade}>
-        <p className="text-sm text-ink-500">Welcome back</p>
-        <h1 className="mt-1 text-[30px] font-semibold tracking-[-0.025em] text-ink-900 sm:text-[34px]">Hello, {member.firstName} <span aria-hidden>👋</span></h1>
-        <p className="mt-1.5 text-[15px] text-ink-500">Here is your assignment for {current.event.code}.</p>
-      </motion.div>
-
       <AssignmentCard
         view={current}
         onConfirm={settings.allowSelfConfirm ? () => { confirmAssignment(current.assignment.id); toast.success('Attendance confirmed', 'Your lead can now see you’re coming.') } : undefined}
       />
+      <div className="-mt-4 flex flex-col items-start justify-between gap-3 rounded-2xl border border-line bg-white px-5 py-4 sm:flex-row sm:items-center">
+        <p className="text-sm text-ink-600">Can’t make {sessionShort(current.event)}? Tell us, and your {current.position.spot ? 'seat' : 'place'} will be given to someone else for this session.</p>
+        <Button variant="secondary" size="sm" onClick={() => setAway(true)}><CalendarX2 className="h-4 w-4" /> I can’t make it</Button>
+      </div>
+      <AwayDialog open={away} onClose={() => setAway(false)} view={current} />
 
       <motion.section {...fade} transition={{ ...fade.transition, delay: 0.15 }} aria-labelledby="map-h">
         <div className="mb-3 flex items-end justify-between">
           <div>
             <h2 id="map-h" className="text-[17px] font-semibold tracking-tight text-ink-900">Where you’ll serve</h2>
-            <p className="text-sm text-ink-500">{current.position.spot ? 'Your usher spot is marked on the venue map.' : `${current.zone.name} is highlighted on the venue map.`}</p>
+            <p className="text-sm text-ink-500">{current.position.spot ? 'Your usher seat is marked on the floor plan.' : `${current.zone.name} is highlighted on the floor plan.`}</p>
           </div>
         </div>
         <VenueMap zones={eventZones} mode="locate" highlightZoneId={current.zone.id} highlightPositionId={current.position.id} positions={positionsOf(data)} occupants={occupants} pinLabel={current.position.spot ? 'You stand here' : `You · ${current.position.name}`} />
@@ -145,10 +221,21 @@ function Found({ result }: { result: Extract<LookupResult, { kind: 'found' }> })
         <div className="mb-2 flex items-end justify-between gap-4">
           <div>
             <h2 id="team-h" className="text-[17px] font-semibold tracking-tight text-ink-900">Your team</h2>
-            <p className="text-sm text-ink-500">Other ushers assigned to {current.zone.name}. Tap a number to call.</p>
+            <p className="text-sm text-ink-500">Other ushers in {current.zone.name} this session. Tap a number to call.</p>
           </div>
           <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-xs font-medium text-ink-600 ring-1 ring-line tabular">{team.length} ushers</span>
         </div>
+        {current.coordinator && (
+          <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl bg-gold-100/60 px-4 py-3 ring-1 ring-gold-300/50">
+            <div className="min-w-0">
+              <div className="text-[12px] font-semibold uppercase tracking-[0.1em] text-gold-700">Your coordinator</div>
+              <div className="truncate font-medium text-ink-900">{fullName(current.coordinator)}</div>
+            </div>
+            <a href={telHref(current.coordinator.phone)} className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-white px-3 text-[13px] font-medium text-ink-800 ring-1 ring-line">
+              <Phone className="h-3.5 w-3.5 text-wine-500" /> {formatPhone(current.coordinator.phone)}
+            </a>
+          </div>
+        )}
         <div className="surface p-2">
           {grouped.map(([pos, list]) => (
             <div key={pos} className="pb-1">
@@ -167,14 +254,88 @@ function Found({ result }: { result: Extract<LookupResult, { kind: 'found' }> })
 
       <motion.section {...fade} transition={{ ...fade.transition, delay: 0.3 }} aria-labelledby="info-h" className="grid gap-6 sm:grid-cols-[1fr_1.2fr]">
         <div>
-          <h2 id="info-h" className="text-[17px] font-semibold tracking-tight text-ink-900">Event information</h2>
+          <h2 id="info-h" className="text-[17px] font-semibold tracking-tight text-ink-900">Session information</h2>
           <p className="mt-1 text-sm text-ink-500">{current.event.description}</p>
         </div>
         <EventInfo event={current.event} />
       </motion.section>
-
-      {others.length > 0 && <OtherEvents others={others} />}
     </div>
+  )
+}
+
+function AwayDialog({ open, onClose, view }: { open: boolean; onClose: () => void; view: AssignmentView }) {
+  const markUnavailable = useStore((s) => s.markUnavailable)
+  const [reason, setReason] = useState('')
+  const submit = () => {
+    markUnavailable(view.assignment.id, reason)
+    toast.success('Thanks for letting us know', `Your ${view.position.spot ? 'seat' : 'place'} for ${sessionShort(view.event)} is now open for someone else.`)
+    setReason('')
+    onClose()
+  }
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="sm"
+      title={`Can’t make ${sessionShort(view.event)}?`}
+      description={`Your ${view.position.spot ? 'seat' : 'place'} at ${view.zone.name} (${view.position.name}) will be left open for this session only, so your coordinator can give it to someone else. Your other sessions don’t change.`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Keep my place</Button>
+          <Button variant="danger" onClick={submit}>I can’t make it</Button>
+        </>
+      }
+    >
+      <Field label="Reason (optional)" htmlFor="away-r" hint="Only your coordinators and the admins see this.">
+        <input id="away-r" className="field" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Work shift, travelling" maxLength={120} />
+      </Field>
+    </Modal>
+  )
+}
+
+function AwayPanel({ view }: { view: AssignmentView }) {
+  const undo = useStore((s) => s.undoUnavailable)
+  const back = () => {
+    if (undo(view.assignment.id)) toast.success('You’re back on the roster', `${view.zone.name} · ${view.position.name}`)
+    else toast.error('Your place has been given to someone else', 'Call your coordinator to be placed again.')
+  }
+  return (
+    <StatePanel
+      icon={<CalendarX2 className="h-6 w-6" />}
+      badge="Can’t make it"
+      tone="bad"
+      title={`You told us you can’t make ${sessionShort(view.event)}`}
+      body={`Your ${view.position.spot ? 'seat' : 'place'} at ${view.zone.name} (${view.position.name}) is open for cover this session.${view.assignment.unavailableReason ? ` Reason: ${view.assignment.unavailableReason}.` : ''}`}
+      event={view.event}
+      action={<Button variant="primary" onClick={back}><Undo2 className="h-4 w-4" /> I can come after all</Button>}
+    />
+  )
+}
+
+function StatePanel({ icon, badge, title, body, event, action, tone = 'warn' }: { icon: React.ReactNode; badge: string; title: string; body: string; event: AssignmentView['event']; action?: React.ReactNode; tone?: 'warn' | 'bad' }) {
+  const navigate = useNavigate()
+  return (
+    <motion.section {...fade} transition={{ ...fade.transition, delay: 0.08 }} className="surface overflow-hidden">
+      <div className="flex flex-col items-start gap-5 p-6 sm:flex-row sm:p-8">
+        <span className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ring-1', tone === 'bad' ? 'bg-bad-50 text-bad-600 ring-bad-500/20' : 'bg-warn-50 text-warn-600 ring-warn-500/20')}>{icon}</span>
+        <div>
+          <span className={cn('inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium ring-1 ring-inset', tone === 'bad' ? 'bg-bad-50 text-bad-600 ring-bad-500/20' : 'bg-warn-50 text-warn-600 ring-warn-500/20')}>
+            <span className={cn('h-1.5 w-1.5 rounded-full', tone === 'bad' ? 'bg-bad-500' : 'bg-warn-500')} />{badge}
+          </span>
+          <h2 className="mt-3 text-xl font-semibold tracking-tight text-ink-900">{title}</h2>
+          <p className="mt-1.5 max-w-lg text-[15px] leading-relaxed text-ink-500">{body}</p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            {action}
+            <Button variant="secondary" onClick={() => navigate('/')}><ArrowLeft className="h-4 w-4" /> Back to search</Button>
+            {!action && <Button variant="ghost" onClick={() => navigate('/help')}><UserCheck className="h-4 w-4" /> What happens next?</Button>}
+          </div>
+        </div>
+      </div>
+      <div className="border-t border-line bg-paper px-6 py-5 sm:px-8">
+        <div className="eyebrow mb-1">{sessionLine(event) || 'Event'}</div>
+        <EventInfo event={event} />
+      </div>
+    </motion.section>
   )
 }
 
@@ -204,7 +365,7 @@ function OtherEvents({ others }: { others: AssignmentView[] }) {
                 {list.map((o) => (
                   <li key={o.assignment.id} className="flex items-center justify-between gap-4 px-5 py-4">
                     <div className="min-w-0">
-                      <div className="truncate font-medium text-ink-900">{o.event.name}</div>
+                      <div className="truncate font-medium text-ink-900">{o.event.series ? eventLabel(o.event) : o.event.name}</div>
                       <div className="text-[13px] text-ink-500">{formatShortDate(o.event.date)} · Report {formatTime(o.event.reportingTime)}</div>
                     </div>
                     <div className="text-right">
@@ -258,40 +419,3 @@ function NotFound({ phone }: { phone: string }) {
   )
 }
 
-function StateScreen({ icon, badge, title, body, name, others }: { icon: React.ReactNode; badge: string; title: string; body: string; name: string; others: AssignmentView[] }) {
-  const navigate = useNavigate()
-  const activeEventId = useStore((s) => s.activeEventId)
-  const event = useStore((s) => s.events.find((e) => e.id === activeEventId))
-  return (
-    <div className="space-y-8">
-      <motion.div {...fade}>
-        <p className="text-sm text-ink-500">Welcome back</p>
-        <h1 className="mt-1 text-[30px] font-semibold tracking-[-0.025em] text-ink-900">Hello, {name} <span aria-hidden>👋</span></h1>
-      </motion.div>
-      <motion.section {...fade} transition={{ ...fade.transition, delay: 0.08 }} className="surface overflow-hidden">
-        <div className="flex flex-col items-start gap-5 p-6 sm:flex-row sm:p-8">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-warn-50 text-warn-600 ring-1 ring-warn-500/20">{icon}</span>
-          <div>
-            <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-warn-50 px-2.5 text-xs font-medium text-warn-600 ring-1 ring-inset ring-warn-500/20">
-              <span className="h-1.5 w-1.5 rounded-full bg-warn-500" />{badge}
-            </span>
-            <h2 className="mt-3 text-xl font-semibold tracking-tight text-ink-900">{title}</h2>
-            <p className="mt-1.5 max-w-lg text-[15px] leading-relaxed text-ink-500">{body}</p>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={() => navigate('/')}><ArrowLeft className="h-4 w-4" /> Back to search</Button>
-              <Button variant="ghost" onClick={() => navigate('/help')}><UserCheck className="h-4 w-4" /> What happens next?</Button>
-            </div>
-          </div>
-        </div>
-        {event && (
-          <div className="border-t border-line bg-paper px-6 py-5 sm:px-8">
-            <div className="eyebrow mb-1">Current event</div>
-            <EventInfo event={event} />
-          </div>
-        )}
-      </motion.section>
-      {others.length > 0 && <OtherEvents others={others} />}
-      <p className="text-center text-xs text-ink-500">{event && `${event.code} · ${formatDate(event.date)}`}</p>
-    </div>
-  )
-}

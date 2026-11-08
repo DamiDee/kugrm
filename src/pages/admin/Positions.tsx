@@ -5,6 +5,8 @@ import { useStore } from '@/store/useStore'
 import { useEventData } from '@/lib/selectors'
 import type { Position, Zone, ZoneKind } from '@/data/types'
 import { ZONE_KIND_LABEL } from '@/data/venue'
+import { DUTIES, DUTY_LABEL, dutyOf } from '@/data/duties'
+import type { Duty } from '@/data/types'
 import { Button } from '@/components/ui/Button'
 import { EmptyState, Field, PageHeader, Popover, Segmented, Select } from '@/components/ui/misc'
 import { ConfirmDialog, Modal } from '@/components/ui/Modal'
@@ -43,10 +45,10 @@ function AddZone({ open, onClose, onSave }: { open: boolean; onClose: () => void
   const [kind, setKind] = useState<ZoneKind>('aisle')
   useEffect(() => { if (open) { setName(''); setKind('aisle') } }, [open])
   return (
-    <Modal open={open} onClose={onClose} size="sm" title="Add zone" description="Name it like the floor plan (Aisle 2, Section 14, Door E1) and it appears on the venue map. Other areas are listed beside it." footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!name.trim()} onClick={() => { onSave(name.trim(), kind); onClose() }}>Add zone</Button></>}>
+    <Modal open={open} onClose={onClose} size="sm" title="Add zone" description="Name it like the floor plan (Aisle 2, Section 14, Door D4) and it appears on the venue map. Other areas are listed beside it." footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!name.trim()} onClick={() => { onSave(name.trim(), kind); onClose() }}>Add zone</Button></>}>
       <div className="space-y-4 pb-2">
         <Field label="Type" htmlFor="zk"><Select id="zk" value={kind} onChange={(v) => setKind(v as ZoneKind)}><option value="aisle">Aisle</option><option value="section">Section</option><option value="door">Door</option><option value="area">Area (altar, car park, overflow…)</option></Select></Field>
-        <Field label="Name" htmlFor="zn"><input id="zn" className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder={{ aisle: 'Aisle 6', section: 'Section 14', door: 'Door E1', area: 'Overflow' }[kind]} onKeyDown={(e) => e.key === 'Enter' && name.trim() && (onSave(name.trim(), kind), onClose())} /></Field>
+        <Field label="Name" htmlFor="zn"><input id="zn" className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder={{ aisle: 'Aisle 6', section: 'Section 14', door: 'Door D4', area: 'Overflow' }[kind]} onKeyDown={(e) => e.key === 'Enter' && name.trim() && (onSave(name.trim(), kind), onClose())} /></Field>
       </div>
     </Modal>
   )
@@ -98,7 +100,7 @@ function PositionGroup({ zone, positions, counts }: { zone: Zone; positions: Pos
         {items.map((pid) => byId.get(pid) && <PositionRow key={pid} position={byId.get(pid)!} onDrop={() => reorder(zone.id, items)} />)}
       </Reorder.Group>
       <div className="flex gap-2 border-t border-line p-3" onKeyDown={(e) => e.key === 'Enter' && addNew()}>
-        <input className="field h-9" placeholder="Add a position, e.g. Control 3" value={newPos} onChange={(e) => setNewPos(e.target.value)} aria-label={`New position in ${zone.name}`} />
+        <input className="field h-9" placeholder="Add a position, e.g. Greeter" value={newPos} onChange={(e) => setNewPos(e.target.value)} aria-label={`New position in ${zone.name}`} />
         <Button size="sm" variant="secondary" className="h-9" disabled={!newPos.trim()} onClick={addNew}><Plus className="h-3.5 w-3.5" /> Add</Button>
       </div>
       <ConfirmDialog open={confirm} onClose={() => setConfirm(false)} title={`Delete ${zone.name}?`} description={`Its ${positions.length} positions and ${counts} assignments will be removed. Those ushers become unassigned.`} confirmLabel="Delete zone" onConfirm={() => { deleteZone(zone.id); toast.success(`${zone.name} deleted.`) }} />
@@ -113,20 +115,25 @@ function PositionRow({ position, onDrop }: { position: Position; onDrop: () => v
   const [edit, setEdit] = useState(false)
   const [name, setName] = useState(position.name)
   const [req, setReq] = useState(String(position.required ?? ''))
+  const [duty, setDuty] = useState<Duty>(dutyOf(position))
   const [confirm, setConfirm] = useState(false)
-  const savePos = () => { update(position.id, { name: name.trim() || position.name, required: Number(req) || 0 }); setEdit(false) }
+  const savePos = () => { update(position.id, { name: name.trim() || position.name, required: Number(req) || 0, duty }); setEdit(false) }
   return (
     <Reorder.Item value={position.id} dragListener={false} dragControls={controls} onDragEnd={onDrop} className="group relative flex items-center gap-2 rounded-lg bg-white px-1.5 py-1.5 hover:bg-paper" whileDrag={{ scale: 1.02, boxShadow: '0 12px 32px -8px rgba(17,24,39,.18)' }}>
       <button onPointerDown={(e) => controls.start(e)} className="cursor-grab touch-none rounded p-1 text-ink-300 hover:text-ink-600 active:cursor-grabbing" aria-label={`Drag to reorder ${position.name}`}><GripVertical className="h-4 w-4" /></button>
       {edit ? (
         <div className="flex flex-1 items-center gap-1.5" onKeyDown={(e) => e.key === 'Enter' && savePos()}>
           <input autoFocus className="field h-8 flex-1" value={name} onChange={(e) => setName(e.target.value)} aria-label="Position name" />
+          <select className="field h-8 w-28 px-2 text-xs" value={duty} onChange={(e) => setDuty(e.target.value as Duty)} aria-label="Duty" disabled={!!position.spot}>
+            {DUTIES.map((d) => <option key={d} value={d}>{DUTY_LABEL[d]}</option>)}
+          </select>
           <input className="field h-8 w-16 tabular" inputMode="numeric" value={req} onChange={(e) => setReq(e.target.value.replace(/\D/g, ''))} aria-label="Ushers needed" title="Ushers needed" />
           <Button size="icon-sm" variant="ghost" onClick={savePos} aria-label="Save"><Check className="h-4 w-4" /></Button>
         </div>
       ) : (
         <>
-          <span className="flex flex-1 items-center gap-1.5 text-sm text-ink-800">{position.isLeadRole && <Crown className="h-3.5 w-3.5 text-gold-600" />}{position.name}</span>
+          <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-ink-800">{position.isLeadRole && <Crown className="h-3.5 w-3.5 text-gold-600" />}<span className="truncate">{position.name}</span></span>
+          <span className="shrink-0 rounded-full bg-paper px-2 py-0.5 text-[11px] text-ink-500 ring-1 ring-line">{DUTY_LABEL[dutyOf(position)]}</span>
           <span className="text-xs text-ink-400 tabular" title="Ushers needed">{position.required ?? 0}</span>
           <div className="flex opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
             <Button size="icon-sm" variant="ghost" onClick={() => setEdit(true)} aria-label={`Edit ${position.name}`}><Pencil className="h-3.5 w-3.5" /></Button>

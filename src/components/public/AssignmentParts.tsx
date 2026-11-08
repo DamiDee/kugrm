@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Check, Copy, Crown, Info, Phone } from 'lucide-react'
 import type { MinistryEvent } from '@/data/types'
 import type { AssignmentView, Teammate } from '@/lib/selectors'
-import { cn, formatDate, formatPhone, formatTime, fullName, telHref } from '@/lib/utils'
+import { cn, formatDate, formatPhone, formatTime, fullName, sessionLine, sessionShort, telHref } from '@/lib/utils'
+import { DUTY_LABEL, dutyOf } from '@/data/duties'
 import { Avatar } from '@/components/ui/Avatar'
 import { StatusBadge } from '@/components/ui/Badge'
 import { leadLabel, zoneNote } from '@/data/venue'
@@ -35,18 +36,19 @@ export function AssignmentCard({ view, onConfirm }: { view: AssignmentView; onCo
           {zone.name}
         </motion.h2>
         {note && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.18 }} className="mt-2 text-[15px] text-gold-300/90">{note}</motion.p>}
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.22 }} className="mt-4 flex items-center gap-3">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.22 }} className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="h-px w-8 bg-gold-300/70" />
           <span className="text-sm text-white/55">Position</span>
           <span className="text-xl font-medium tracking-tight">{position.name}</span>
+          <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-white/80 ring-1 ring-white/15">{DUTY_LABEL[dutyOf(position)]}</span>
           {assignment.isTeamLead && <span className="inline-flex items-center gap-1 rounded-full bg-gold-300/15 px-2 py-0.5 text-xs text-gold-300"><Crown className="h-3 w-3" /> Team lead</span>}
         </motion.div>
       </div>
       <dl className="relative grid grid-cols-2 border-t border-white/10 text-sm sm:grid-cols-4">
         {[
-          ['Event', event.code],
-          ['Reporting time', formatTime(event.reportingTime)],
-          ['Venue', event.venue.split(',')[0]],
+          ['Session', sessionShort(event)],
+          ['Report by', formatTime(event.reportingTime)],
+          [event.startTime ? 'Service starts' : 'Venue', event.startTime ? formatTime(event.startTime) : event.venue.split(',')[0]],
           [lead, teamLead ? fullName(teamLead) : 'To be announced'],
         ].map(([k, v], i) => (
           <div key={k} className={cn('px-6 py-4 sm:px-8', i % 2 === 1 && 'border-l border-white/10', i >= 2 && 'border-t border-white/10 sm:border-t-0', i >= 1 && 'sm:border-l')}>
@@ -123,9 +125,12 @@ export function TeamMemberRow({ t, showPhone }: { t: Teammate; showPhone: boolea
 export function EventInfo({ event }: { event: MinistryEvent }) {
   const rows: [string, string | undefined][] = [
     ['Event', event.name],
+    ['Theme', event.theme],
     ['Date', formatDate(event.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })],
-    ['Venue', event.venue],
+    ['Session', sessionLine(event) || undefined],
+    ['Service starts', event.startTime ? formatTime(event.startTime) : undefined],
     ['Reporting time', `Report by ${formatTime(event.reportingTime)}`],
+    ['Venue', event.venue],
     ['Team briefing', event.briefingTime ? formatTime(event.briefingTime) : undefined],
     ['Dress code', event.dressCode],
   ]

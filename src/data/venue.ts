@@ -1,70 +1,114 @@
 import type { SpotKey, Zone, ZoneKind } from './types'
 
 /**
- * The main auditorium floor plan (105 m × 90 m), in plan units.
+ * The Koinonia Global Arena floor plan (105 m × 90 m), in plan units that
+ * match the drawing DRE supplied (1 unit ≈ 1 px of that plan).
  *
- * The altar is on the east (right) wall. Seating is 90 sections of 160 seats
- * (16 × 10) in ten columns by nine rows, numbered column by column from the
- * altar side: the column nearest the altar holds 1 to 9 (top to bottom), the
- * back column 82 to 90. Aisles 1 to 6 run between the rows. Two tent lines,
- * where a chair column was removed for the iron pillars, also cross the hall;
- * they are not aisles. The hall splits into Nave C, B and A, 30 m each.
+ * The altar is on the east (right) wall. Seating is 83 sections in seven
+ * columns, numbered column by column from the altar side: the column nearest
+ * the altar holds 1 to 11 (top to bottom), the next 12 to 23, and so on to
+ * the back column, 72 to 83. Each section is 11 rows of 12 seats; the front
+ * block of Nave B (sections 5, 6 and 7) has 17, 16 and 17 rows. Sections 17
+ * and 18 are the technical and media block.
  *
- * Every section except 1–9 and 32 has four usher spots: the first and last
- * row, at both ends.
+ * Aisles 1 to 9 run across the hall between the section rows, each with an
+ * aisle door (D1–D9) on the back wall. Two tent lines, where a chair column
+ * was removed for the aluminium pillars, also cross the hall; they are not
+ * aisles. The hall splits into Nave C, B and A, 30 m each.
+ *
+ * Every section except 5, 6, 7, 17 and 18 has four usher seats: the first
+ * and last row, at both ends.
  */
 
 export type Rect = { x: number; y: number; w: number; h: number }
 
 export const PLAN = {
-  /** everything drawn, including door labels outside the walls */
-  view: { x: 30, y: 10, w: 1720, h: 1380 } as Rect,
-  building: { x: 145, y: 80, w: 1462, h: 1247 } as Rect,
-  seating: { x: 200, y: 97, w: 1113, h: 1208 } as Rect,
+  /** everything drawn, including labels outside the walls */
+  view: { x: 0, y: 18, w: 1534, h: 1302 } as Rect,
+  building: { x: 107, y: 104, w: 1331, h: 1142 } as Rect,
+  seating: { x: 160, y: 117, w: 1028, h: 1117 } as Rect,
 }
 
-const COLS = 10
-const ROWS = 9
-const COL_X0 = 218
-const COL_STEP = 111.1
-const COL_W = 93
-const ROW_Y = [122, 250, 378, 516, 655, 793, 932, 1060, 1188]
-const ROW_H = 96
+const COLS = 7
+const ROWS = 12
+const COL_X0 = 172
+const COL_STEP = 145.3
+const COL_W = 133
+const ROW_Y = [121, 212, 305, 398, 498, 591, 684, 777, 877, 970, 1063, 1156]
+const ROW_H = 75
 
-export const SECTION_COUNT = COLS * ROWS
-export const AISLE_COUNT = 6
-export const SEATS_PER_SECTION = 160
+export const SECTION_COUNT = 83
+export const AISLE_COUNT = 9
+export const SEATS_PER_SECTION = 132
+export const SECTION_ROWS = 11
+export const SEATS_PER_ROW = 12
+
+/** Sections drawn somewhere other than their grid cell. */
+const SPECIAL_RECTS: Record<number, Rect> = {
+  5: { x: 1044, y: 500, w: 132, h: 108 },
+  6: { x: 1044, y: 627, w: 132, h: 98 },
+  7: { x: 1044, y: 744, w: 132, h: 106 },
+  17: { x: 903, y: 605, w: 54, h: 141 },
+  18: { x: 962, y: 605, w: 55, h: 141 },
+}
 
 /** Column 0 is the back (west) column, row 0 the top (north) row. */
-export function sectionAt(col: number, row: number) {
-  return (COLS - 1 - col) * ROWS + row + 1
-}
 export function sectionCell(n: number) {
-  return { col: COLS - 1 - Math.floor((n - 1) / ROWS), row: (n - 1) % ROWS }
+  if (n <= 11) {
+    // the altar column: 1–4 in Nave C, 5–7 the front block of Nave B, 8–11 in Nave A
+    const row = n <= 4 ? n - 1 : n <= 7 ? n - 1 : n
+    return { col: COLS - 1, row }
+  }
+  const m = n - 12
+  return { col: COLS - 2 - Math.floor(m / ROWS), row: m % ROWS }
 }
 export function sectionRect(n: number): Rect {
+  if (SPECIAL_RECTS[n]) return SPECIAL_RECTS[n]
   const { col, row } = sectionCell(n)
   return { x: COL_X0 + col * COL_STEP, y: ROW_Y[row], w: COL_W, h: ROW_H }
 }
+export const colCenterX = (col: number) => COL_X0 + col * COL_STEP + COL_W / 2
 
-/** The pair of rows each aisle runs between, and where the tent lines are. */
-const AISLE_ROWS: Record<number, number> = { 1: 0, 2: 1, 3: 3, 4: 4, 5: 6, 6: 7 }
-export const TENT_ROWS = [2, 5]
-const gapRect = (row: number): Rect => {
+/* ---------- aisles and tent lines ---------- */
+
+/** The row each aisle runs below. */
+const AISLE_ROWS: Record<number, number> = { 1: 0, 2: 1, 3: 2, 4: 4, 5: 5, 6: 6, 7: 8, 8: 9, 9: 10 }
+export const TENT_ROWS = [3, 7]
+const gapY = (row: number) => {
   const top = ROW_Y[row] + ROW_H
-  return { x: PLAN.seating.x, y: top, w: PLAN.seating.w, h: ROW_Y[row + 1] - top }
+  return { y: top, h: ROW_Y[row + 1] - top }
 }
-export function aisleRect(n: number): Rect {
-  return gapRect(AISLE_ROWS[n])
-}
-export const aisleCenterY = (n: number) => aisleRect(n).y + aisleRect(n).h / 2
-export const tentLineY = (row: number) => gapRect(row).y + gapRect(row).h / 2
-/** x of each iron pillar along a tent line */
-export const PILLAR_X = Array.from({ length: COLS + 1 }, (_, i) => (i === 0 ? 212 : i === COLS ? 1311 : COL_X0 + i * COL_STEP - (COL_STEP - COL_W) / 2))
-/** Aisles drawn as highlighted lanes on the plan. */
-export const LANE_AISLES = [3, 4]
+const SEAT_X0 = PLAN.seating.x
+const SEAT_X1 = PLAN.seating.x + PLAN.seating.w
 
-/* ---------- usher spots ---------- */
+/**
+ * The strips each aisle is drawn as. In the front block of Nave B the aisles
+ * shift: aisle 4 runs below section 5, aisle 6 below section 6, and aisles 5
+ * and 6 stop at the technical and media block.
+ */
+export function aisleRects(n: number): Rect[] {
+  const { y, h } = gapY(AISLE_ROWS[n])
+  if (n === 4) return [{ x: SEAT_X0, y, w: 1036 - SEAT_X0, h }, { x: 1038, y: 609, w: SEAT_X1 - 1038, h: 16 }]
+  if (n === 5) return [{ x: SEAT_X0, y, w: 891 - SEAT_X0, h }]
+  if (n === 6) return [{ x: SEAT_X0, y, w: 891 - SEAT_X0, h }, { x: 1038, y: 726, w: SEAT_X1 - 1038, h: 16 }]
+  return [{ x: SEAT_X0, y, w: SEAT_X1 - SEAT_X0, h }]
+}
+/** The aisle's main strip, used to zoom to and describe it. */
+export const aisleRect = (n: number) => aisleRects(n)[0]
+export const aisleCenterY = (n: number) => aisleRect(n).y + aisleRect(n).h / 2
+/** Columns whose label sits on each aisle strip (the plan writes AISLE n under every section). */
+export function aisleLabelCols(n: number) {
+  if (n === 5 || n === 6) return [0, 1, 2, 3, 4]
+  if (n === 4) return [0, 1, 2, 3, 4, 5]
+  return [0, 1, 2, 3, 4, 5, 6]
+}
+export const tentLineY = (row: number) => gapY(row).y + gapY(row).h / 2
+/** x of each aluminium pillar along a tent line */
+export const PILLAR_X = Array.from({ length: COLS + 1 }, (_, i) => (i === 0 ? 165 : i === COLS ? 1181 : COL_X0 + i * COL_STEP - (COL_STEP - COL_W) / 2))
+/** Nave B aisles 4 to 6, the central lane, drawn darker. */
+export const LANE_AISLES = [4, 5, 6]
+
+/* ---------- usher seats ---------- */
 
 /** Front is the row nearest the altar; left and right as seen facing the altar. */
 export const SPOTS: { key: SpotKey; name: string }[] = [
@@ -74,9 +118,9 @@ export const SPOTS: { key: SpotKey; name: string }[] = [
   { key: 'BR', name: 'Back row, right end' },
 ]
 export const spotName = (k: SpotKey) => SPOTS.find((s) => s.key === k)!.name
-/** Sections without usher spots: the front column (VIP, ministers, protocol) and the media section. */
-export const NO_SPOT_SECTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 32]
-export const hasSpots = (n: number) => !NO_SPOT_SECTIONS.includes(n)
+/** Sections without usher seats: Lady Sandra's, protocols, ministers, and the technical and media block. */
+export const NO_SPOT_SECTIONS = [5, 6, 7, 17, 18]
+export const hasSpots = (n: number) => n >= 1 && n <= SECTION_COUNT && !NO_SPOT_SECTIONS.includes(n)
 export function spotPoint(n: number, k: SpotKey) {
   const r = sectionRect(n)
   // facing the altar (east), left is north (top of the plan)
@@ -87,7 +131,14 @@ export function spotPoint(n: number, k: SpotKey) {
 
 /* ---------- doors ---------- */
 
-export type DoorKind = 'entrance' | 'exit' | 'access'
+/**
+ * aisle: an aisle door on the back wall, open during service.
+ * closed: an aisle door kept closed during service (D2, D5, D8).
+ * twoway: the public entrance and exit doors on the Nave C wall (X3–X5).
+ * workers: workers-only entrance and exit on the Nave A wall (X1, X2).
+ * access: the ministers' and worship team's doors by the stage (M1–M3).
+ */
+export type DoorKind = 'aisle' | 'closed' | 'twoway' | 'workers' | 'access'
 export interface Door {
   ref: string
   kind: DoorKind
@@ -97,30 +148,44 @@ export interface Door {
   b: number
   /** label badge centre */
   label: { x: number; y: number }
-  note?: string
+  note: string
 }
 
+const AISLE_DOOR_Y = [203, 296, 389, 582, 675, 768, 962, 1055, 1148]
+const CLOSED_DOORS = [2, 5, 8]
+
 export const DOORS: Door[] = [
-  { ref: 'E4', kind: 'entrance', side: 'top', a: 278, b: 365, label: { x: 322, y: 44 } },
-  { ref: 'E2', kind: 'entrance', side: 'left', a: 320, b: 405, label: { x: 100, y: 362 } },
-  { ref: 'E1', kind: 'entrance', side: 'left', a: 1002, b: 1087, label: { x: 100, y: 1045 } },
-  { ref: 'E3', kind: 'entrance', side: 'bottom', a: 278, b: 365, label: { x: 322, y: 1364 } },
-  { ref: 'X3', kind: 'exit', side: 'top', a: 612, b: 695, label: { x: 653, y: 110 } },
-  { ref: 'X4', kind: 'exit', side: 'top', a: 947, b: 1030, label: { x: 989, y: 110 } },
-  { ref: 'X1', kind: 'exit', side: 'bottom', a: 612, b: 695, label: { x: 653, y: 1295 } },
-  { ref: 'X2', kind: 'exit', side: 'bottom', a: 947, b: 1030, label: { x: 989, y: 1295 } },
-  { ref: 'M3', kind: 'access', side: 'top', a: 1318, b: 1377, label: { x: 1369, y: 44 }, note: 'Beside the worship team, near Section 1' },
-  { ref: 'M2', kind: 'access', side: 'right', a: 90, b: 150, label: { x: 1658, y: 120 }, note: 'Worship team access' },
-  { ref: 'M1', kind: 'access', side: 'right', a: 1088, b: 1146, label: { x: 1658, y: 1118 }, note: 'Ministers and the Rotunda, by the covered walkway' },
+  ...AISLE_DOOR_Y.map((y, i): Door => {
+    const closed = CLOSED_DOORS.includes(i + 1)
+    return {
+      ref: `D${i + 1}`, kind: closed ? 'closed' : 'aisle', side: 'left', a: y - 22, b: y + 22, label: { x: 77, y },
+      note: closed ? `Aisle ${i + 1} door, closed during service` : `Aisle ${i + 1} door, back wall`,
+    }
+  }),
+  { ref: 'X3', kind: 'twoway', side: 'top', a: 290, b: 330, label: { x: 310, y: 80 }, note: 'Two-way door, entrance and exit (Nave C)' },
+  { ref: 'X4', kind: 'twoway', side: 'top', a: 580, b: 620, label: { x: 600, y: 80 }, note: 'Two-way door, entrance and exit (Nave C)' },
+  { ref: 'X5', kind: 'twoway', side: 'top', a: 871, b: 911, label: { x: 891, y: 80 }, note: 'Two-way door, entrance and exit (Nave C)' },
+  { ref: 'X1', kind: 'workers', side: 'bottom', a: 437, b: 474, label: { x: 455, y: 1272 }, note: 'Workers only, entrance and exit (Nave A)' },
+  { ref: 'X2', kind: 'workers', side: 'bottom', a: 727, b: 765, label: { x: 746, y: 1272 }, note: 'Workers only, entrance and exit (Nave A)' },
+  { ref: 'M3', kind: 'access', side: 'top', a: 1175, b: 1228, label: { x: 1201, y: 80 }, note: 'Access door beside the worship team, near Section 1' },
+  { ref: 'M2', kind: 'access', side: 'right', a: 125, b: 178, label: { x: 1468, y: 152 }, note: 'Worship team access door' },
+  { ref: 'M1', kind: 'access', side: 'right', a: 1030, b: 1083, label: { x: 1468, y: 1056 }, note: 'Ministers and the Rotunda, by the covered walkway' },
 ]
+export const DOOR_KIND_LABEL: Record<DoorKind, string> = {
+  aisle: 'Aisle door',
+  closed: 'Aisle door, closed during service',
+  twoway: 'Entrance and exit',
+  workers: 'Workers only',
+  access: 'Access door',
+}
 
 export function doorRect(d: Door): Rect {
   const B = PLAN.building
-  const depth = (d.b - d.a) / 2 + 8
-  if (d.side === 'top') return { x: d.a, y: B.y - 8, w: d.b - d.a, h: depth }
-  if (d.side === 'bottom') return { x: d.a, y: B.y + B.h - depth + 8, w: d.b - d.a, h: depth }
-  if (d.side === 'left') return { x: B.x - 8, y: d.a, w: depth, h: d.b - d.a }
-  return { x: B.x + B.w - depth + 8, y: d.a, w: depth, h: d.b - d.a }
+  const depth = (d.b - d.a) / 2 + 6
+  if (d.side === 'top') return { x: d.a, y: B.y - 6, w: d.b - d.a, h: depth }
+  if (d.side === 'bottom') return { x: d.a, y: B.y + B.h - depth + 6, w: d.b - d.a, h: depth }
+  if (d.side === 'left') return { x: B.x - 6, y: d.a, w: depth, h: d.b - d.a }
+  return { x: B.x + B.w - depth + 6, y: d.a, w: depth, h: d.b - d.a }
 }
 
 /* ---------- areas beside the altar ---------- */
@@ -133,36 +198,38 @@ export interface PlanArea {
 }
 
 export const AREAS: PlanArea[] = [
-  { ref: 'worship', name: 'Worship Team', rect: { x: 1390, y: 163, w: 197, h: 248 } },
-  { ref: 'altar', name: 'Altar & Pulpit', rect: { x: 1390, y: 499, w: 197, h: 408 }, note: 'Pulpit and platform, 30 m wide' },
-  { ref: 'screen', name: 'Crane Screen', rect: { x: 1589, y: 499, w: 14, h: 408 }, note: 'LED screen on the crane, in the 1 m strip behind the stage' },
-  { ref: 'tech', name: 'Technical Space', rect: { x: 1390, y: 985, w: 197, h: 98 }, note: 'Stage, beside the altar' },
-  { ref: 'walkway', name: 'Covered Walkway', rect: { x: 1390, y: 1090, w: 212, h: 53 }, note: 'Screened walkway from door M1 to the stage' },
-  { ref: 'reserve', name: 'Stage Reserve', rect: { x: 1390, y: 1153, w: 197, h: 137 } },
-  { ref: 'apostle', name: "Apostle's Chairs", rect: { x: 1314, y: 657, w: 23, h: 91 }, note: 'Nine special chairs for the Apostle and guest ministers' },
-  { ref: 'protocol', name: 'Protocol Row', rect: { x: 1283, y: 660, w: 20, h: 86 }, note: 'Front row of Section 5' },
+  { ref: 'worship', name: 'Worship Team', rect: { x: 1241, y: 182, w: 177, h: 174 } },
+  { ref: 'altar', name: 'Altar & Pulpit', rect: { x: 1240, y: 491, w: 178, h: 370 }, note: 'Pulpit and platform, 30 m wide (Nave B)' },
+  { ref: 'screen', name: 'Crane Screen', rect: { x: 1419, y: 489, w: 13, h: 372 }, note: 'LED screen on the crane, in the 1 m strip behind the stage' },
+  { ref: 'tech', name: 'Technical Space', rect: { x: 1241, y: 935, w: 177, h: 90 }, note: 'Stage, beside the altar' },
+  { ref: 'walkway', name: 'Covered Walkway', rect: { x: 1241, y: 1030, w: 197, h: 53 }, note: 'Covered, screened walkway inside, from door M1 to the stage' },
+  { ref: 'reserve', name: 'Stage Reserve', rect: { x: 1241, y: 1089, w: 177, h: 126 } },
+  { ref: 'apostle', name: "Apostle's Chairs", rect: { x: 1178, y: 627, w: 21, h: 98 }, note: 'Nine special chairs for the Apostle and guest ministers' },
+  { ref: 'protocol', name: 'Protocol Row', rect: { x: 1150, y: 628, w: 19, h: 72 }, note: 'Front row of Section 6' },
 ]
 
 export const NAVES = [
-  { name: 'NAVE C', size: '30 m', y0: 80, y1: 495 },
-  { name: 'NAVE B', size: '30 m', y0: 495, y1: 911 },
-  { name: 'NAVE A', size: '30 m', y0: 911, y1: 1327 },
+  { name: 'NAVE C', size: '30 m', y0: 104, y1: 486 },
+  { name: 'NAVE B', size: '30 m', y0: 486, y1: 864 },
+  { name: 'NAVE A', size: '30 m', y0: 864, y1: 1246 },
 ]
 
 /* ---------- section types ---------- */
 
-export const INTERNATIONAL = [7, 8, 15, 16, 17, 24, 25, 26]
-export const MEDIA_SECTION = 32
-export type SectionStyle = 'standard' | 'international' | 'lady' | 'ministers' | 'media'
+export const INTERNATIONAL = [8, 9, 19, 20, 21, 31, 32, 33]
+export type SectionStyle = 'standard' | 'international' | 'lady' | 'protocol' | 'ministers' | 'technical' | 'media'
 export function sectionStyle(n: number): SectionStyle {
-  if (n === 4) return 'lady'
-  if (n === 6) return 'ministers'
-  if (n === MEDIA_SECTION) return 'media'
+  if (n === 5) return 'lady'
+  if (n === 6) return 'protocol'
+  if (n === 7) return 'ministers'
+  if (n === 17) return 'technical'
+  if (n === 18) return 'media'
   if (INTERNATIONAL.includes(n)) return 'international'
   return 'standard'
 }
-/** Rows 1 and 9 were formed from the removed chair columns (dashed outline on the plan). */
-export const isNewSection = (n: number) => {
+/** The outer sections by the exit doors (top and bottom rows), 11 × 11, dashed on the plan. */
+export const isOuterSection = (n: number) => {
+  if (SPECIAL_RECTS[n]) return false
   const { row } = sectionCell(n)
   return row === 0 || row === ROWS - 1
 }
@@ -170,20 +237,26 @@ const SECTION_NOTES: Record<SectionStyle, string | undefined> = {
   standard: undefined,
   international: 'International guests',
   lady: 'Lady Sandra’s section',
+  protocol: 'Protocols on the front row',
   ministers: 'Ministers, HODs and sons of the ministry',
-  media: 'Media and technical (videography)',
+  technical: 'Technical (with Section 18)',
+  media: 'Media and videography (with Section 17)',
 }
 export function sectionNote(n: number) {
-  if (n === 5) return 'Protocols on the front row'
-  return SECTION_NOTES[sectionStyle(n)]
+  return [SECTION_NOTES[sectionStyle(n)], isOuterSection(n) ? 'Outer section, 11 × 11' : undefined].filter(Boolean).join(', ') || undefined
+}
+export function naveOf(n: number) {
+  const r = sectionRect(n)
+  const cy = r.y + r.h / 2
+  return NAVES.find((v) => cy >= v.y0 && cy < v.y1)?.name.replace('NAVE', 'Nave') ?? 'Nave B'
 }
 
 /* ---------- linking roster zones to the plan ---------- */
 
 /**
- * The plan reference for a zone: S1–S90, A1–A6, a door code, or an area ref.
- * Zones named like the plan ("Section 14", "Aisle 2", "E1") are placed even
- * without an explicit mapRef, so zones added by an admin show up too.
+ * The plan reference for a zone: S1–S83, A1–A9, a door code, or an area ref.
+ * Zones named like the plan ("Section 14", "Aisle 2", "Door D4") are placed
+ * even without an explicit mapRef, so zones added by an admin show up too.
  */
 export function zoneRef(zone: Pick<Zone, 'name' | 'mapRef'>): string | undefined {
   if (zone.mapRef) return zone.mapRef
@@ -192,7 +265,7 @@ export function zoneRef(zone: Pick<Zone, 'name' | 'mapRef'>): string | undefined
   if (m && +m[1] >= 1 && +m[1] <= SECTION_COUNT) return `S${+m[1]}`
   m = name.match(/^aisle\s*(\d)$/i)
   if (m && +m[1] >= 1 && +m[1] <= AISLE_COUNT) return `A${+m[1]}`
-  m = name.match(/^(?:door\s*)?([EXM]\d)\b/i)
+  m = name.match(/^(?:door\s*)?([DXM]\d)\b/i)
   if (m && DOORS.some((d) => d.ref === m![1].toUpperCase())) return m[1].toUpperCase()
   const area = AREAS.find((a) => a.name.toLowerCase() === name.toLowerCase())
   return area?.ref
@@ -214,27 +287,22 @@ export function zoneNote(zone: Pick<Zone, 'name' | 'mapRef'>): string | undefine
   const ref = zoneRef(zone)
   if (!ref) return undefined
   const n = sectionOfRef(ref)
-  if (n) {
-    const { row } = sectionCell(n)
-    const nave = row < 3 ? 'Nave C' : row < 6 ? 'Nave B' : 'Nave A'
-    return [sectionNote(n), nave].filter(Boolean).join(' · ')
-  }
+  if (n) return [sectionNote(n), naveOf(n)].filter(Boolean).join(' · ')
   if (/^A\d$/.test(ref)) {
     const a = +ref.slice(1)
-    const row = AISLE_ROWS[a]
-    return `Between section rows ${row + 1} and ${row + 2}`
+    return `Across the hall, door D${a} on the back wall${LANE_AISLES.includes(a) ? ' · Nave B central lane' : ''}`
   }
   const door = DOORS.find((d) => d.ref === ref)
-  if (door) return door.note ?? (door.kind === 'entrance' ? 'Entrance door' : 'Exit door')
+  if (door) return door.note
   return AREAS.find((a) => a.ref === ref)?.note
 }
 
-/** The entrance door closest to a zone, to tell an usher which way to come in. */
+/** The open door closest to a zone or spot, to tell an usher which way to come in. */
 export function nearestEntrance(ref: string | undefined, point?: { x: number; y: number }) {
   const r = point ? { ...point, w: 0, h: 0 } : ref && refRect(ref)
   if (!r) return undefined
   let best: { door: Door; d: number } | undefined
-  for (const door of DOORS.filter((d) => d.kind === 'entrance')) {
+  for (const door of DOORS.filter((d) => d.kind === 'aisle' || d.kind === 'twoway' || d.kind === 'workers')) {
     const dr = doorRect(door)
     const cx = dr.x + dr.w / 2
     const cy = dr.y + dr.h / 2

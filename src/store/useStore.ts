@@ -1,8 +1,8 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
-import type { Activity, AppNotification, Assignment, Member, MinistryEvent, Position, Zone, ZoneKind } from '@/data/types'
+import type { Activity, AppNotification, Assignment, Member, MemberRole, MinistryEvent, Position, Zone, ZoneKind } from '@/data/types'
 import { createSeed } from '@/data/mock'
-import { uid } from '@/lib/utils'
+import { eventLabel, normalizePhone, uid } from '@/lib/utils'
 
 const safeStorage: StateStorage = {
   getItem: (k) => { try { return localStorage.getItem(k) } catch { return null } },
@@ -39,10 +39,15 @@ interface State {
   notifications: AppNotification[]
   activeEventId: string
   admin: { name: string; email: string } | null
+  /** a coordinator or leader signed in to their team view */
+  teamUser: { memberId: string } | null
   settings: { contactPhone: string; contactName: string; showTeammatePhones: boolean; allowSelfConfirm: boolean }
 
   login: (email: string, remember: boolean) => void
   logout: () => void
+  teamLogin: (phone: string) => 'ok' | 'not-found' | 'not-team'
+  teamLogout: () => void
+  setTeamRole: (memberId: string, role: MemberRole, opts?: { leaderId?: string; coordinates?: string[] }) => void
   setActiveEvent: (id: string) => void
   log: (text: string, kind: Activity['kind']) => void
   notify: (n: Omit<AppNotification, 'id' | 'at' | 'read'>) => void
@@ -66,6 +71,10 @@ interface State {
   bulkAssign: (memberIds: string[], eventId: string, zoneId: string, positionId: string) => number
   moveToEvent: (memberIds: string[], fromEventId: string, toEventId: string) => number
   confirmAssignment: (id: string) => void
+  /** the usher can't make this session: the assignment stays on record but the spot opens for cover */
+  markUnavailable: (id: string, reason?: string) => void
+  undoUnavailable: (id: string) => boolean
+  copyRoster: (fromEventId: string, toEventId: string) => number
 
   addZone: (eventId: string, name: string, kind: ZoneKind) => string
   renameZone: (id: string, name: string) => void
@@ -84,7 +93,8 @@ const seed = () => {
   return {
     ...s,
     admin: null,
-    settings: { contactPhone: '08020001122', contactName: 'Department Secretariat', showTeammatePhones: true, allowSelfConfirm: true },
+    teamUser: null,
+    settings: { contactPhone: '08020009988', contactName: 'Department Secretariat', showTeammatePhones: true, allowSelfConfirm: true },
   }
 }
 
@@ -99,6 +109,31 @@ export const useStore = create<State>()(
         set({ admin: { name, email } })
       },
       logout: () => set({ admin: null }),
+      teamLogin: (phone) => {
+        const p = normalizePhone(phone)
+        const m = get().members.find((x) => x.phone === p)
+        if (!m) return 'not-found'
+        if (m.role !== 'coordinator' && m.role !== 'leader') return 'not-team'
+        set({ teamUser: { memberId: m.id } })
+        return 'ok'
+      },
+      teamLogout: () => set({ teamUser: null }),
+      setTeamRole: (memberId, role, opts = {}) => {
+        set((s) => ({
+          members: s.members.map((m) => {
+            if (m.id === memberId) {
+              if (role === 'usher') return { ...m, role: undefined, leaderId: undefined, coordinates: undefined }
+              if (role === 'leader') return { ...m, role, leaderId: undefined, coordinates: undefined }
+              return { ...m, role, leaderId: opts.leaderId, coordinates: opts.coordinates ?? m.coordinates ?? [] }
+            }
+            // a leader who steps down leaves their coordinators without a leader
+            if (role !== 'leader' && m.leaderId === memberId) return { ...m, leaderId: undefined }
+            return m
+          }),
+        }))
+        const m = get().members.find((x) => x.id === memberId)
+        if (m) get().log(role === 'usher' ? `removed ${m.firstName} ${m.lastName} from the team structure` : `set ${m.firstName} ${m.lastName} as a ${role}`, 'team')
+      },
       setActiveEvent: (id) => set({ activeEventId: id }),
       log: (text, kind) =>
         set((s) => ({ activity: [{ id: uid('ac'), actor: s.admin?.name ?? 'Admin', text, at: new Date().toISOString(), kind }, ...s.activity].slice(0, 60) })),
@@ -246,15 +281,42 @@ export const useStore = create<State>()(
           const p = s.positions.find((p) => p.id === a.positionId)
           const tz = s.zones.find((x) => x.eventId === toEventId && x.name === z?.name)
           const tp = tz && s.positions.find((x) => x.zoneId === tz.id && x.name === p?.name)
-          if (tz && tp) out.push({ ...a, id: uid('as'), eventId: toEventId, zoneId: tz.id, positionId: tp.id, status: 'assigned', updatedAt: new Date().toISOString() })
+          if (tz && tp) out.push({ ...a, id: uid('as'), eventId: toEventId, zoneId: tz.id, positionId: tp.id, status: 'assigned', unavailableReason: undefined, updatedAt: new Date().toISOString() })
         })
         const outIds = new Set(out.map((a) => a.memberId))
-        set((st) => ({ assignments: [...st.assignments.filter((a) => !(a.eventId === toEventId && outIds.has(a.memberId))), ...out] }))
+        const spotIds = new Set(out.filter((a) => s.positions.find((p) => p.id === a.positionId)?.spot).map((a) => a.positionId))
+        set((st) => ({ assignments: [...st.assignments.filter((a) => !(a.eventId === toEventId && (outIds.has(a.memberId) || spotIds.has(a.positionId)))), ...out] }))
         const to = s.events.find((e) => e.id === toEventId)
-        s.log(`copied ${out.length} assignments to ${to?.code}`, 'assign')
+        s.log(`copied ${out.length} assignments to ${to ? eventLabel(to) : 'another event'}`, 'assign')
         return out.length
       },
       confirmAssignment: (id) => set((s) => ({ assignments: s.assignments.map((a) => (a.id === id ? { ...a, status: 'confirmed' } : a)) })),
+      markUnavailable: (id, reason) => {
+        set((s) => ({ assignments: s.assignments.map((a) => (a.id === id ? { ...a, status: 'unavailable', unavailableReason: reason?.trim() || undefined, isTeamLead: false, updatedAt: new Date().toISOString() } : a)) }))
+        const s = get()
+        const a = s.assignments.find((x) => x.id === id)
+        const m = a && s.members.find((x) => x.id === a.memberId)
+        const e = a && s.events.find((x) => x.id === a.eventId)
+        const z = a && s.zones.find((x) => x.id === a.zoneId)
+        if (m && e && z) {
+          set((st) => ({ activity: [{ id: uid('ac'), actor: `${m.firstName} ${m.lastName}`, text: `can't make ${eventLabel(e)} (${z.name})`, at: new Date().toISOString(), kind: 'absence' as const }, ...st.activity].slice(0, 60) }))
+          s.notify({ title: 'Spot needs cover', body: `${m.firstName} ${m.lastName} can't make ${eventLabel(e)}. ${z.name} needs someone.`, tone: 'warn' })
+        }
+      },
+      undoUnavailable: (id) => {
+        const s = get()
+        const a = s.assignments.find((x) => x.id === id)
+        if (!a || a.status !== 'unavailable') return false
+        // if someone already covers the spot, the usher can't take it back
+        const spot = s.positions.find((p) => p.id === a.positionId)?.spot
+        if (spot && s.assignments.some((x) => x.id !== id && x.positionId === a.positionId && x.status !== 'unavailable')) return false
+        set((st) => ({ assignments: st.assignments.map((x) => (x.id === id ? { ...x, status: 'assigned', unavailableReason: undefined, updatedAt: new Date().toISOString() } : x)) }))
+        return true
+      },
+      copyRoster: (fromEventId, toEventId) => {
+        const ids = [...new Set(get().assignments.filter((a) => a.eventId === fromEventId).map((a) => a.memberId))]
+        return get().moveToEvent(ids, fromEventId, toEventId)
+      },
 
       addZone: (eventId, name, kind) => {
         const id = uid('z')
@@ -279,8 +341,8 @@ export const useStore = create<State>()(
         set((s) => ({ positions: s.positions.map((p) => (orderedIds.includes(p.id) ? { ...p, order: orderedIds.indexOf(p.id) } : p)) })),
 
       updateSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
-      resetDemo: () => set({ ...seed(), admin: get().admin }),
+      resetDemo: () => set({ ...seed(), admin: get().admin, teamUser: null }),
     }),
-    { name: 'grm-store-v3', storage: createJSONStorage(() => safeStorage), version: 1 },
+    { name: 'grm-store-v4', storage: createJSONStorage(() => safeStorage), version: 1 },
   ),
 )

@@ -1,5 +1,5 @@
-import type { Activity, AppNotification, Assignment, Member, MinistryEvent, Position, Zone } from './types'
-import { AISLE_COUNT, DOORS, MEDIA_SECTION, SECTION_COUNT, SPOTS, hasSpots } from './venue'
+import type { Activity, AppNotification, Assignment, Duty, Member, MinistryEvent, Position, Zone } from './types'
+import { AISLE_COUNT, DOORS, SECTION_COUNT, SPOTS, hasSpots, naveOf, sectionCell, type DoorKind } from './venue'
 
 /* Deterministic RNG so every fresh install sees the same demo roster. */
 function mulberry32(seed: number) {
@@ -17,32 +17,45 @@ const LAST = ['Adeyemi', 'Okafor', 'Emmanuel', 'Adebayo', 'Oche', 'Ibrahim', 'Ad
 const PREFIX = ['0803', '0806', '0813', '0816', '0810', '0814', '0703', '0706', '0805', '0807', '0815', '0811', '0705', '0802', '0808', '0812', '0701', '0708', '0902', '0901', '0907', '0904', '0903', '0906', '0909', '0908']
 const UNITS = ['Team A', 'Team B', 'Team C', 'Team D', 'Team E', 'Team F']
 
-export const AISLE_POSITIONS: { name: string; required: number; lead?: boolean }[] = [
-  { name: 'Aisle Lead', required: 1, lead: true },
-  { name: 'Control 1', required: 6 },
-  { name: 'Control 2', required: 6 },
-  { name: 'Floor Marshal', required: 30 },
+type PosSpec = { name: string; required: number; duty: Duty; lead?: boolean }
+
+export const AISLE_POSITIONS: PosSpec[] = [
+  { name: 'Aisle Lead', required: 1, duty: 'lead', lead: true },
+  { name: 'Crowd Control', required: 6, duty: 'crowd' },
+  { name: 'Floor Marshal', required: 3, duty: 'crowd' },
 ]
 
-/** Sections without usher spots (front column and media) get floor ushers instead. */
-export const SPOTLESS_SECTION_POSITION = { name: 'Section Usher', required: 2 }
+/** Sections without usher seats get their own positions. */
+const SPOTLESS_POSITIONS: Record<number, PosSpec> = {
+  5: { name: 'Section Usher', required: 2, duty: 'protocol' },
+  6: { name: 'Protocol Support', required: 3, duty: 'protocol' },
+  7: { name: 'Section Usher', required: 2, duty: 'protocol' },
+  17: { name: 'Tech Liaison', required: 1, duty: 'support' },
+  18: { name: 'Media Liaison', required: 1, duty: 'support' },
+}
 
-const DOOR_REQUIRED = { entrance: 16, exit: 10, access: 8 } as const
+const DOOR_POSITIONS: Record<DoorKind, PosSpec[]> = {
+  aisle: [{ name: 'Door Usher', required: 2, duty: 'door' }, { name: 'Greeter', required: 1, duty: 'greeter' }],
+  closed: [{ name: 'Door Usher', required: 1, duty: 'door' }],
+  twoway: [{ name: 'Greeter', required: 4, duty: 'greeter' }, { name: 'Door Usher', required: 3, duty: 'door' }, { name: 'Crowd Control', required: 3, duty: 'crowd' }],
+  workers: [{ name: 'Door Usher', required: 2, duty: 'door' }],
+  access: [{ name: 'Door Usher', required: 2, duty: 'door' }],
+}
 
 /** Areas on the floor plan (mapRef) and off it (no mapRef: listed beside the map). */
-export const AREA_ZONES: { name: string; ref?: string; position: string; required: number }[] = [
-  { name: 'Altar & Pulpit', ref: 'altar', position: 'Altar Protocol', required: 16 },
-  { name: 'Worship Team', ref: 'worship', position: 'Stage Support', required: 10 },
-  { name: "Apostle's Chairs", ref: 'apostle', position: 'Chair Protocol', required: 9 },
-  { name: 'Protocol Row', ref: 'protocol', position: 'Protocol Support', required: 12 },
-  { name: 'Technical Space', ref: 'tech', position: 'Tech Liaison', required: 4 },
-  { name: 'Covered Walkway', ref: 'walkway', position: 'Walkway Control', required: 6 },
-  { name: 'Main Gate', position: 'Welcome & Direction', required: 40 },
-  { name: 'Registration Area', position: 'Registration Desk', required: 40 },
-  { name: 'Car Park', position: 'Traffic Direction', required: 50 },
-  { name: 'Rotunda', position: "Ministers' Escort", required: 16 },
-  { name: 'Overflow', position: 'Overflow Seating', required: 60 },
-  { name: 'First Aid Point', position: 'First Aid Support', required: 12 },
+export const AREA_ZONES: { name: string; ref?: string; positions: PosSpec[] }[] = [
+  { name: 'Altar & Pulpit', ref: 'altar', positions: [{ name: 'Altar Protocol', required: 12, duty: 'protocol' }] },
+  { name: 'Worship Team', ref: 'worship', positions: [{ name: 'Stage Support', required: 6, duty: 'support' }] },
+  { name: "Apostle's Chairs", ref: 'apostle', positions: [{ name: 'Chair Protocol', required: 9, duty: 'protocol' }] },
+  { name: 'Protocol Row', ref: 'protocol', positions: [{ name: 'Protocol Support', required: 6, duty: 'protocol' }] },
+  { name: 'Technical Space', ref: 'tech', positions: [{ name: 'Tech Liaison', required: 3, duty: 'support' }] },
+  { name: 'Covered Walkway', ref: 'walkway', positions: [{ name: 'Walkway Control', required: 4, duty: 'crowd' }] },
+  { name: 'Main Gate', positions: [{ name: 'Greeter', required: 20, duty: 'greeter' }, { name: 'Crowd Control', required: 12, duty: 'crowd' }] },
+  { name: 'Registration Area', positions: [{ name: 'Registration Desk', required: 24, duty: 'support' }] },
+  { name: 'Car Park', positions: [{ name: 'Traffic Direction', required: 30, duty: 'crowd' }] },
+  { name: 'Rotunda', positions: [{ name: "Ministers' Escort", required: 12, duty: 'protocol' }] },
+  { name: 'Overflow', positions: [{ name: 'Overflow Seating', required: 30, duty: 'seat' }] },
+  { name: 'First Aid Point', positions: [{ name: 'First Aid Support', required: 8, duty: 'support' }] },
 ]
 
 /** Hand-picked members used in the demo flow and the brief's examples. */
@@ -73,10 +86,24 @@ export interface SeedState {
   activeEventId: string
 }
 
-export const DEMO = { found: '08031234567', unassigned: '08051112233', missing: '08099990000' }
+export const DEMO = {
+  found: '08031234567',
+  unassigned: '08051112233',
+  missing: '08099990000',
+  coordinator: '08020001122',
+  leader: '08141230008',
+}
+
+export const TGA_SERIES = 'TGA 2026'
+export const TGA_VENUE = 'Koinonia Global Arena, Koinonia Drive, off Olusegun Obasanjo Way, Jabi District, Abuja'
+const TGA_DAYS = ['2026-11-18', '2026-11-19', '2026-11-20', '2026-11-21', '2026-11-22']
+export const SESSION_TIMES = {
+  morning: { startTime: '08:45', reportingTime: '07:30', briefingTime: '08:00' },
+  evening: { startTime: '17:00', reportingTime: '15:45', briefingTime: '16:15' },
+} as const
 
 export function createSeed(): SeedState {
-  const rnd = mulberry32(20261114)
+  const rnd = mulberry32(20261118)
   const pick = <T,>(arr: T[]) => arr[Math.floor(rnd() * arr.length)]
   const now = Date.now()
   const ago = (mins: number) => new Date(now - mins * 60000).toISOString()
@@ -108,36 +135,71 @@ export function createSeed(): SeedState {
       status: rnd() < 0.97 ? 'active' : 'inactive', joinedYear: 2014 + Math.floor(rnd() * 12),
     })
   }
+  const byId = new Map(members.map((m) => [m.id, m]))
 
-  /* ---------- events ---------- */
-  const events: MinistryEvent[] = [
+  /* ---------- leaders and coordinators ---------- */
+  const LEADERS: Record<string, string> = { 'Nave C': 'm8', 'Nave B': 'm12', 'Nave A': 'm11', Doors: 'm13' }
+  Object.values(LEADERS).forEach((id) => (byId.get(id)!.role = 'leader'))
+  const groups: { names: string[]; leader: string; who?: string }[] = []
+  for (const nave of ['Nave C', 'Nave B', 'Nave A']) {
+    for (let col = 0; col < 7; col++) {
+      const secs: number[] = []
+      for (let n = 1; n <= SECTION_COUNT; n++) if (sectionCell(n).col === col && naveOf(n) === nave) secs.push(n)
+      groups.push({ names: secs.map((n) => `Section ${n}`), leader: LEADERS[nave], who: nave === 'Nave B' && col === 3 ? 'm2' : undefined })
+    }
+  }
+  groups.push({ names: ['Aisle 1', 'Aisle 2', 'Aisle 3'], leader: LEADERS['Nave C'] })
+  groups.push({ names: ['Aisle 4', 'Aisle 5', 'Aisle 6'], leader: LEADERS['Nave B'] })
+  groups.push({ names: ['Aisle 7', 'Aisle 8', 'Aisle 9'], leader: LEADERS['Nave A'] })
+  groups.push({ names: ['Altar & Pulpit', "Apostle's Chairs", 'Protocol Row', 'Worship Team', 'Technical Space'], leader: LEADERS['Nave B'], who: 'm10' })
+  groups.push({ names: ['Door X3', 'Door X4', 'Door X5', 'Main Gate'], leader: LEADERS.Doors, who: 'm7' })
+  groups.push({ names: DOORS.filter((d) => d.ref.startsWith('D')).map((d) => `Door ${d.ref}`), leader: LEADERS.Doors, who: 'm5' })
+  groups.push({ names: ['Door X1', 'Door X2', 'Door M1', 'Door M2', 'Door M3', 'Covered Walkway', 'Rotunda'], leader: LEADERS.Doors })
+  groups.push({ names: ['Registration Area', 'Car Park', 'Overflow', 'First Aid Point'], leader: LEADERS.Doors })
+  let ci = 13
+  for (const g of groups) {
+    let id = g.who
+    if (!id) {
+      do id = `m${++ci + 20}`
+      while (byId.get(id)!.status !== 'active' || byId.get(id)!.role)
+    }
+    Object.assign(byId.get(id)!, { role: 'coordinator', leaderId: g.leader, coordinates: g.names })
+  }
+
+  /* ---------- events: TGA is one event per session ---------- */
+  const events: MinistryEvent[] = []
+  TGA_DAYS.forEach((date, d) => {
+    for (const session of ['morning', 'evening'] as const) {
+      const t = SESSION_TIMES[session]
+      const published = d < 2
+      events.push({
+        id: `ev_tga26_d${d + 1}${session === 'morning' ? 'am' : 'pm'}`,
+        name: 'The General Assembly 2026',
+        code: `TGA D${d + 1} ${session === 'morning' ? 'AM' : 'PM'}`,
+        series: TGA_SERIES, day: d + 1, session,
+        theme: 'More Than Conquerors (Romans 8:37)',
+        description: `Day ${d + 1}, ${session} session. Full department deployment across the arena, doors and grounds.`,
+        date, venue: TGA_VENUE, ...t,
+        dressCode: session === 'morning' ? 'Departmental Uniform' : 'White top, black bottom, department tag',
+        status: 'active', rosterStatus: published ? 'published' : 'draft', publishedAt: published ? ago(60 * 26) : undefined,
+        instructions: `Report by ${session === 'morning' ? '7:30 AM' : '3:45 PM'} for the department briefing. Collect your tag from your section coordinator. If you can’t make this session, tell us here so your seat can be covered.`,
+      })
+    }
+  })
+  events.push(
     {
-      id: 'ev_tga26', name: 'The Global Apostolic Invasion 2026', code: 'TGA 2026',
-      description: 'Annual global gathering. Full department deployment across the auditorium, gallery, overflow and grounds.',
-      date: '2026-11-14', venue: 'Koinonia Global Centre, Abuja', reportingTime: '15:30', briefingTime: '16:00',
-      dressCode: 'Departmental Uniform', status: 'active', rosterStatus: 'published', publishedAt: ago(60 * 26),
-      instructions: 'All ushers must report at least 30 minutes before the department briefing. Collect your aisle tag from your Aisle Lead.',
+      id: 'ev_ms_oct', name: 'Miracle Service: October', code: 'MS OCT', session: 'morning', startTime: '09:00',
+      description: 'Monthly miracle service. Reduced deployment, main hall and doors only.',
+      date: '2026-10-25', venue: TGA_VENUE, reportingTime: '07:00', briefingTime: '07:30',
+      dressCode: 'White top, black bottom', status: 'completed', rosterStatus: 'published', publishedAt: '2026-10-20T10:00:00.000Z',
     },
     {
-      id: 'ev_ms_oct', name: 'Miracle Service: October', code: 'MS OCT',
-      description: 'Monthly miracle service. Reduced deployment, main hall and entrances only.',
-      date: '2026-10-25', venue: 'Koinonia Global Centre, Abuja', reportingTime: '07:00', briefingTime: '07:30',
-      dressCode: 'White top, black bottom', status: 'active', rosterStatus: 'published', publishedAt: ago(60 * 50),
-      instructions: 'Report to your zone lead on arrival. Keep the front five rows clear for ministers until 9:00 AM.',
-    },
-    {
-      id: 'ev_sor26', name: 'SOR 2026', code: 'SOR 2026',
+      id: 'ev_sor26', name: 'SOR 2026', code: 'SOR 2026', session: 'evening', startTime: '17:00',
       description: 'Year-end programme. Roster in preparation.',
-      date: '2026-12-12', venue: 'Koinonia Global Centre, Abuja', reportingTime: '14:00', briefingTime: '14:30',
+      date: '2026-12-12', venue: TGA_VENUE, reportingTime: '14:00', briefingTime: '14:30',
       dressCode: 'Departmental Uniform', status: 'draft', rosterStatus: 'draft',
     },
-    {
-      id: 'ev_klc26', name: "Koinonia Leaders' Conference 2026", code: 'KLC 2026',
-      description: 'Three-day leadership conference.',
-      date: '2026-08-22', venue: 'Eagle Square, Abuja', reportingTime: '08:00', briefingTime: '08:30',
-      dressCode: 'Departmental Uniform', status: 'completed', rosterStatus: 'published', publishedAt: '2026-08-15T10:00:00.000Z',
-    },
-  ]
+  )
 
   /* ---------- zones + positions (cloned per event) ---------- */
   const zones: Zone[] = []
@@ -149,128 +211,146 @@ export function createSeed(): SeedState {
       zones.push(z)
       return z
     }
-    for (let a = 1; a <= AISLE_COUNT; a++) {
-      const z = zone(`a${a}`, `Aisle ${a}`, 'aisle', `A${a}`)
-      AISLE_POSITIONS.forEach((p, i) =>
-        positions.push({ id: `${z.id}_p${i}`, name: p.name, zoneId: z.id, order: i, isLeadRole: p.lead, required: p.required }))
-    }
+    const addPos = (z: Zone, list: PosSpec[]) =>
+      list.forEach((p, i) => positions.push({ id: `${z.id}_p${i}`, name: p.name, zoneId: z.id, order: i, isLeadRole: p.lead, required: p.required, duty: p.duty }))
+    for (let a = 1; a <= AISLE_COUNT; a++) addPos(zone(`a${a}`, `Aisle ${a}`, 'aisle', `A${a}`), AISLE_POSITIONS)
     for (let n = 1; n <= SECTION_COUNT; n++) {
       const z = zone(`s${n}`, `Section ${n}`, 'section', `S${n}`)
       if (hasSpots(n))
-        SPOTS.forEach((sp, i) => positions.push({ id: `${z.id}_${sp.key}`, name: sp.name, zoneId: z.id, order: i, required: 1, spot: sp.key }))
-      else
-        positions.push({ id: `${z.id}_p0`, name: n === MEDIA_SECTION ? 'Media Liaison' : SPOTLESS_SECTION_POSITION.name, zoneId: z.id, order: 0, required: SPOTLESS_SECTION_POSITION.required })
+        SPOTS.forEach((sp, i) => positions.push({ id: `${z.id}_${sp.key}`, name: sp.name, zoneId: z.id, order: i, required: 1, spot: sp.key, duty: 'seat' }))
+      else addPos(z, [SPOTLESS_POSITIONS[n]])
     }
-    for (const d of DOORS) {
-      const z = zone(`d${d.ref}`, `Door ${d.ref}`, 'door', d.ref)
-      positions.push({ id: `${z.id}_p0`, name: 'Door Control', zoneId: z.id, order: 0, required: DOOR_REQUIRED[d.kind] })
-    }
-    AREA_ZONES.forEach((ar, i) => {
-      const z = zone(`z${i}`, ar.name, 'area', ar.ref)
-      positions.push({ id: `${z.id}_p0`, name: ar.position, zoneId: z.id, order: 0, required: ar.required })
-    })
+    for (const d of DOORS) addPos(zone(`d${d.ref}`, `Door ${d.ref}`, 'door', d.ref), DOOR_POSITIONS[d.kind])
+    AREA_ZONES.forEach((ar, i) => addPos(zone(`z${i}`, ar.name, 'area', ar.ref), ar.positions))
   }
+  const posById = new Map(positions.map((p) => [p.id, p]))
 
   /* ---------- assignments ---------- */
   const assignments: Assignment[] = []
   let aCount = 0
-  const add = (memberId: string, eventId: string, positionId: string, isTeamLead = false, status: Assignment['status'] = 'confirmed') => {
-    const pos = positions.find((p) => p.id === positionId)!
-    assignments.push({ id: `as${++aCount}`, memberId, eventId, zoneId: pos.zoneId, positionId, isTeamLead, status, updatedAt: ago(60 * 24 + aCount % 900) })
+  const add = (memberId: string, eventId: string, positionId: string, isTeamLead = false, status: Assignment['status'] = 'confirmed', unavailableReason?: string) => {
+    const pos = posById.get(positionId)!
+    assignments.push({ id: `as${++aCount}`, memberId, eventId, zoneId: pos.zoneId, positionId, isTeamLead, status, unavailableReason, updatedAt: ago(60 * 24 + (aCount % 900)) })
   }
   const posOf = (eventId: string, zoneName: string, posName: string) => {
     const z = zones.find((z) => z.eventId === eventId && z.name === zoneName)!
     return positions.find((p) => p.zoneId === z.id && p.name === posName)!.id
   }
 
-  // TGA 2026: the demo flow
-  const T = 'ev_tga26'
-  add('m1', T, posOf(T, 'Section 41', 'Front row, left end'))
-  add('m2', T, posOf(T, 'Section 41', 'Back row, left end'), true)
-  add('m3', T, posOf(T, 'Section 41', 'Front row, right end'))
-  add('m4', T, posOf(T, 'Section 41', 'Back row, right end'))
-  add('m5', T, posOf(T, 'Aisle 4', 'Control 1'))
-  add('m6', T, posOf(T, 'Aisle 1', 'Aisle Lead'), true)
-  add('m7', T, posOf(T, 'Main Gate', 'Welcome & Direction'), true)
-  add('m8', T, posOf(T, 'Aisle 2', 'Aisle Lead'), true)
-  // m9 Faith Ibrahim stays unassigned for TGA on purpose
-  add('m10', T, posOf(T, 'Altar & Pulpit', 'Altar Protocol'), true)
-  add('m11', T, posOf(T, 'Aisle 3', 'Control 2'))
-  add('m12', T, posOf(T, 'Car Park', 'Traffic Direction'), true)
-  add('m13', T, posOf(T, 'Section 12', 'Front row, left end'), true)
+  const D1AM = 'ev_tga26_d1am'
+  // the demo flow: Daniel stands at Section 41; Grace can't make Day 1 morning
+  add('m1', D1AM, posOf(D1AM, 'Section 41', 'Front row, left end'))
+  add('m6', D1AM, posOf(D1AM, 'Section 41', 'Back row, left end'), true)
+  add('m3', D1AM, posOf(D1AM, 'Section 41', 'Front row, right end'))
+  add('m4', D1AM, posOf(D1AM, 'Section 41', 'Back row, right end'), false, 'unavailable', 'Travelling back on Wednesday afternoon')
 
-  // Fill every TGA zone to a realistic coverage level, landing on exactly TARGET assigned.
   const fill: Record<string, number> = {
-    'Aisle 1': 0.94, 'Aisle 2': 1, 'Aisle 3': 0.97, 'Aisle 4': 0.9, 'Aisle 5': 0.85, 'Aisle 6': 1,
-    Overflow: 0.62, 'Car Park': 0.7, 'First Aid Point': 0.75, 'Registration Area': 0.8, 'Door X2': 0.6, 'Door E3': 0.75,
+    'Aisle 1': 0.9, 'Aisle 7': 0.8, 'Aisle 9': 0.9,
+    Overflow: 0.6, 'Car Park': 0.7, 'First Aid Point': 0.75, 'Registration Area': 0.8, 'Door X2': 0.5, 'Door D7': 0.5,
   }
-  // the back sections and a few others run short, so the map has something to show
-  const shortSections = [73, 74, 77, 82, 83, 84, 85, 88, 89, 90, 64, 66, 70, 55, 59, 47, 52, 36, 43, 29]
+  const shortSections = [72, 73, 74, 83, 82, 81, 60, 61, 71, 70, 59, 47, 52, 36, 43, 29, 64, 66, 55]
   shortSections.forEach((n, i) => (fill[`Section ${n}`] = [0.5, 0.75, 0.5, 0.75, 0.25][i % 5]))
-  const pool = members.filter((m) => m.status === 'active' && !['m9'].includes(m.id) && !assignments.some((a) => a.memberId === m.id && a.eventId === T))
+  const reserved = new Set(['m1', 'm3', 'm4', 'm6', 'm9'])
+  const pool = members.filter((m) => m.status === 'active' && !m.role && !reserved.has(m.id))
   let poolIdx = 0
-  const TARGET = 920
-  const tgaZones = zones.filter((z) => z.eventId === T)
-  outer: for (const z of tgaZones) {
+  const evZones = (id: string) => zones.filter((z) => z.eventId === id)
+  for (const z of evZones(D1AM)) {
     for (const p of positions.filter((p) => p.zoneId === z.id)) {
-      // an usher spot is filled or not; other positions fill to a share of their headcount
-      const want = p.spot ? (rnd() < (fill[z.name] ?? 0.97) ? 1 : 0) : Math.round((p.required ?? 0) * (fill[z.name] ?? 1))
+      const want = p.spot ? (rnd() < (fill[z.name] ?? 0.96) ? 1 : 0) : Math.round((p.required ?? 0) * (fill[z.name] ?? 0.97))
       let have = assignments.filter((a) => a.positionId === p.id).length
-      while (have < want) {
-        if (assignments.filter((a) => a.eventId === T).length >= TARGET || poolIdx >= pool.length) break outer
-        add(pool[poolIdx++].id, T, p.id, p.isLeadRole && have === 0, rnd() < 0.82 ? 'confirmed' : 'assigned')
+      while (have < want && poolIdx < pool.length) {
+        add(pool[poolIdx++].id, D1AM, p.id, !!p.isLeadRole && have === 0, rnd() < 0.8 ? 'confirmed' : 'assigned')
         have++
       }
     }
   }
-  // top up any shortfall on the busiest zones
-  const topUp = [posOf(T, 'Overflow', 'Overflow Seating'), posOf(T, 'Car Park', 'Traffic Direction')]
-  let t = 0
-  while (assignments.filter((a) => a.eventId === T).length < TARGET && poolIdx < pool.length)
-    add(pool[poolIdx++].id, T, topUp[t++ % 2], false, 'assigned')
+  const spare = pool.slice(poolIdx)
 
-  // Smaller rosters for the other events
-  const smallRoster = (evId: string, count: number, onlyAisles: boolean, status: Assignment['status']) => {
-    const evZones = zones.filter((z) => z.eventId === evId && (!onlyAisles || z.kind === 'aisle' || z.kind === 'door' || ['Main Gate', 'Car Park'].includes(z.name)))
-    const evPos = positions.filter((p) => evZones.some((z) => z.id === p.zoneId))
-    // an usher spot takes one person; other positions take their full headcount
-    const slots = evPos.flatMap((p) => (p.spot ? [p] : Array<Position>(p.required ?? 1).fill(p)))
-    const shuffled = [...members].filter((m) => m.status === 'active' && m.id !== 'm9').sort(() => rnd() - 0.5)
-    const taken = new Set(assignments.filter((a) => a.eventId === evId).map((a) => a.memberId))
-    let k = 0
-    for (const m of shuffled) {
-      if (k >= count) break
-      if (taken.has(m.id)) continue
-      const p = slots[k % slots.length]
-      const lead = p.isLeadRole && !assignments.some((a) => a.positionId === p.id)
-      add(m.id, evId, p.id, !!lead, status)
-      k++
+  /** Later sessions keep most of Day 1 morning's team in the same places, with some changes. */
+  const copySession = (to: string, keep: number, status: () => Assignment['status']) => {
+    const used = new Set<string>()
+    const src = assignments.filter((a) => a.eventId === D1AM && !['m1', 'm3', 'm4', 'm6'].includes(a.memberId))
+    for (const a of src) {
+      const pid = a.positionId.replace(D1AM, to)
+      if (rnd() < keep) { add(a.memberId, to, pid, a.isTeamLead, status()); used.add(a.memberId) }
+      else if (rnd() < 0.7) {
+        const m = spare.find((x) => !used.has(x.id))
+        if (m) { add(m.id, to, pid, a.isTeamLead, status()); used.add(m.id) }
+      }
     }
   }
-  add('m1', 'ev_ms_oct', posOf('ev_ms_oct', 'Main Gate', 'Welcome & Direction'))
-  add('m1', 'ev_klc26', posOf('ev_klc26', 'Section 18', 'Front row, left end'))
-  add('m1', 'ev_sor26', posOf('ev_sor26', 'Aisle 5', 'Control 1'), false, 'assigned')
-  smallRoster('ev_ms_oct', 340, true, 'confirmed')
-  smallRoster('ev_klc26', 420, false, 'confirmed')
-  smallRoster('ev_sor26', 210, false, 'assigned')
+  const st = (confirmed: number) => () => (rnd() < confirmed ? 'confirmed' : 'assigned') as Assignment['status']
+  copySession('ev_tga26_d1pm', 0.9, st(0.72))
+  copySession('ev_tga26_d2am', 0.88, st(0.55))
+  copySession('ev_tga26_d2pm', 0.86, st(0.45))
+  copySession('ev_tga26_d3am', 0.6, () => 'assigned')
+
+  // Daniel's other sessions
+  add('m1', 'ev_tga26_d1pm', posOf('ev_tga26_d1pm', 'Door X4', 'Greeter'))
+  add('m4', 'ev_tga26_d1pm', posOf('ev_tga26_d1pm', 'Section 41', 'Back row, right end'), false, 'assigned')
+  add('m3', 'ev_tga26_d1pm', posOf('ev_tga26_d1pm', 'Section 41', 'Front row, right end'))
+  add('m1', 'ev_tga26_d2am', posOf('ev_tga26_d2am', 'Section 41', 'Front row, left end'), false, 'assigned')
+  add('m3', 'ev_tga26_d2am', posOf('ev_tga26_d2am', 'Section 41', 'Front row, right end'), false, 'assigned')
+  add('m1', 'ev_tga26_d3am', posOf('ev_tga26_d3am', 'Section 41', 'Front row, left end'), false, 'assigned')
+  // keep one usher per spot after the copies
+  const seen = new Set<string>()
+  for (let i = assignments.length - 1; i >= 0; i--) {
+    const a = assignments[i]
+    if (!posById.get(a.positionId)?.spot) continue
+    const k = a.positionId
+    if (seen.has(k)) assignments.splice(i, 1)
+    else seen.add(k)
+  }
+
+  // a few more people who can't make it, so the cover list has something in it
+  const REASONS = ['Work shift', 'Travelling', 'Unwell', 'Family event', 'Exams']
+  const mark = (eventId: string, count: number) => {
+    const list = assignments.filter((a) => a.eventId === eventId && a.status !== 'unavailable' && !a.isTeamLead && a.memberId !== 'm1')
+    for (let i = 0; i < count; i++) {
+      const a = list[Math.floor(rnd() * list.length)]
+      a.status = 'unavailable'
+      a.unavailableReason = pick(REASONS)
+    }
+  }
+  mark(D1AM, 7)
+  mark('ev_tga26_d1pm', 5)
+  mark('ev_tga26_d2am', 3)
+
+  // smaller rosters for the other events
+  const smallRoster = (evId: string, count: number, status: Assignment['status']) => {
+    const evZ = evZones(evId).filter((z) => z.kind === 'aisle' || z.kind === 'door' || ['Main Gate', 'Car Park'].includes(z.name))
+    const evPos = positions.filter((p) => evZ.some((z) => z.id === p.zoneId))
+    const slots = evPos.flatMap((p) => Array<Position>(p.required ?? 1).fill(p))
+    const shuffled = pool.slice().sort(() => rnd() - 0.5)
+    shuffled.slice(0, Math.min(count, slots.length)).forEach((m, k) => {
+      const p = slots[k]
+      add(m.id, evId, p.id, !!p.isLeadRole && !assignments.some((a) => a.positionId === p.id), status)
+    })
+  }
+  add('m1', 'ev_ms_oct', posOf('ev_ms_oct', 'Main Gate', 'Greeter'))
+  smallRoster('ev_ms_oct', 160, 'confirmed')
+  smallRoster('ev_sor26', 90, 'assigned')
 
   /* ---------- activity + notifications ---------- */
+  const d1 = assignments.filter((a) => a.eventId === D1AM)
+  const away = d1.filter((a) => a.status === 'unavailable').length
   const activity: Activity[] = [
-    { id: 'ac1', actor: 'Daniel', text: 'assigned 12 ushers to Aisle 4', at: ago(14), kind: 'assign' },
-    { id: 'ac2', actor: 'Grace', text: 'updated TGA 2026 reporting time to 3:30 PM', at: ago(52), kind: 'event' },
-    { id: 'ac3', actor: 'Admin', text: 'imported 56 members from members-oct.csv', at: ago(60 * 3), kind: 'import' },
-    { id: 'ac4', actor: 'Deborah', text: 'added Door M3 to TGA 2026 positions', at: ago(60 * 7), kind: 'position' },
-    { id: 'ac5', actor: 'Admin', text: 'published the TGA 2026 roster', at: ago(60 * 26), kind: 'publish' },
-    { id: 'ac6', actor: 'Samuel', text: 'reassigned 4 ushers from Overflow to Section 19', at: ago(60 * 30), kind: 'assign' },
-    { id: 'ac7', actor: 'Grace', text: 'created SOR 2026 as a draft', at: ago(60 * 49), kind: 'event' },
+    { id: 'ac0', actor: 'Grace Emmanuel', text: "said she can't make TGA Day 1 morning (Section 41)", at: ago(9), kind: 'absence' },
+    { id: 'ac1', actor: 'Daniel', text: 'assigned 12 ushers to Aisle 4 for TGA D1 AM', at: ago(14), kind: 'assign' },
+    { id: 'ac2', actor: 'Grace', text: 'set the evening reporting time for TGA to 3:45 PM', at: ago(52), kind: 'event' },
+    { id: 'ac3', actor: 'Admin', text: 'imported 56 members from members-nov.csv', at: ago(60 * 3), kind: 'import' },
+    { id: 'ac4', actor: 'Admin', text: 'gave John Adewale Sections 40 to 43', at: ago(60 * 7), kind: 'team' },
+    { id: 'ac5', actor: 'Admin', text: 'published the TGA Day 1 and Day 2 rosters', at: ago(60 * 26), kind: 'publish' },
+    { id: 'ac6', actor: 'Samuel', text: 'moved 4 greeters from the Main Gate to Door X3', at: ago(60 * 30), kind: 'assign' },
   ]
   const notifications: AppNotification[] = [
-    { id: 'n1', title: 'Unassigned members remaining', body: `${members.length - TARGET} members have no position for TGA 2026.`, at: ago(30), tone: 'warn', read: false },
-    { id: 'n2', title: 'Event approaching', body: 'Miracle Service: October is in 17 days. Its roster is published.', at: ago(60 * 2), tone: 'info', read: false },
+    { id: 'n1', title: 'Ushers who can’t make it', body: `${away} ushers said they can’t make TGA Day 1 morning. Their spots are open for cover.`, at: ago(9), tone: 'warn', read: false },
+    { id: 'n2', title: 'TGA starts in 10 days', body: 'The General Assembly runs 18 to 22 November, mornings at 8:45 AM and evenings at 5:00 PM.', at: ago(60 * 2), tone: 'info', read: false },
     { id: 'n3', title: 'Import completed', body: '56 members imported. 2 rows skipped for duplicate phone numbers.', at: ago(60 * 3), tone: 'success', read: false },
-    { id: 'n4', title: 'Duplicate phone numbers found', body: '2 rows in members-oct.csv matched existing members.', at: ago(60 * 3 + 1), tone: 'warn', read: true },
-    { id: 'n5', title: 'Roster published', body: 'TGA 2026 assignments are now visible to ushers.', at: ago(60 * 26), tone: 'success', read: true },
+    { id: 'n4', title: 'Roster published', body: 'TGA Day 1 and Day 2 assignments are now visible to ushers.', at: ago(60 * 26), tone: 'success', read: true },
   ]
 
-  return { members, events, zones, positions, assignments, activity, notifications, activeEventId: T }
+  return { members, events, zones, positions, assignments, activity, notifications, activeEventId: D1AM }
 }
+
+export type { Duty }

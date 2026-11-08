@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ClipboardList, Crown, LayoutGrid, Map as MapIcon, Pencil, Plus, Rows3, SearchX, Trash2 } from 'lucide-react'
 import { useStore } from '@/store/useStore'
-import { positionsOf, spotOccupants, useEventData, useMemberMap } from '@/lib/selectors'
+import { positionsOf, spotOccupants, uncoveredSpots, useEventData, useMemberMap } from '@/lib/selectors'
+import { DUTIES, DUTY_LABEL, dutyOf } from '@/data/duties'
 import { useFirstLoad, useMediaQuery } from '@/lib/hooks'
 import type { ZoneKind } from '@/data/types'
-import { cn, formatPhone, fullName, normalizePhone } from '@/lib/utils'
+import { cn, eventLabel, formatPhone, fullName, normalizePhone } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { Avatar } from '@/components/ui/Avatar'
 import { StatusBadge } from '@/components/ui/Badge'
@@ -32,6 +33,7 @@ export default function Assignments() {
   const memberMap = useMemberMap()
   const occupants = useMemo(() => spotOccupants(data, memberMap), [data, memberMap])
   const mapPositions = useMemo(() => positionsOf(data), [data])
+  const uncovered = useMemo(() => uncoveredSpots(data, memberMap), [data, memberMap])
   const remove = useStore((s) => s.removeAssignment)
   const loading = useFirstLoad('assignments')
 
@@ -49,28 +51,30 @@ export default function Assignments() {
   const [q, setQ] = useState('')
   const [zone, setZone] = useState('')
   const [status, setStatus] = useState('')
+  const [duty, setDuty] = useState(params.get('duty') ?? '')
   const [sort, setSort] = useState<{ key: string; dir: SortDir }>({ key: 'zone', dir: 'asc' })
   const [page, setPage] = useState(1)
-  useEffect(() => setPage(1), [q, zone, status, activeEventId])
+  useEffect(() => setPage(1), [q, zone, status, duty, activeEventId])
 
   const rows = useMemo(() => {
     const t = q.trim().toLowerCase()
     const d = normalizePhone(q)
     const leadByZone = new Map(data.zoneStats.map((z) => [z.zone.id, z.lead]))
-    const list = data.assignments
+    const list = [...data.assignments, ...data.unavailable]
       .map((a) => ({ a, m: memberMap.get(a.memberId)!, z: data.zoneById.get(a.zoneId)!, p: data.positionById.get(a.positionId)!, lead: leadByZone.get(a.zoneId) }))
       .filter((r) => r.m && r.z && r.p)
       .filter((r) => !t || fullName(r.m).toLowerCase().includes(t) || (d.length >= 3 && r.m.phone.includes(d)))
       .filter((r) => !zone || r.z.id === zone)
-      .filter((r) => !status || r.a.status === status)
+      .filter((r) => (status ? r.a.status === status : r.a.status !== 'unavailable'))
+      .filter((r) => !duty || dutyOf(r.p) === duty)
     const dir = sort.dir === 'asc' ? 1 : -1
     const key = (r: (typeof list)[number]) => sort.key === 'member' ? fullName(r.m) : sort.key === 'position' ? r.p.name : sort.key === 'status' ? r.a.status : `${String(r.z.order).padStart(3, '0')}${r.p.order}${fullName(r.m)}`
     return list.sort((x, y) => key(x).localeCompare(key(y)) * dir)
-  }, [data, memberMap, q, zone, status, sort])
+  }, [data, memberMap, q, zone, status, duty, sort])
   const pages = Math.max(1, Math.ceil(rows.length / PER))
   const pageRows = rows.slice((page - 1) * PER, page * PER)
   const onSort = (k: string) => setSort((s) => ({ key: k, dir: s.key === k && s.dir === 'asc' ? 'desc' : 'asc' }))
-  const toRemove = confirmId ? data.assignments.find((a) => a.id === confirmId) : undefined
+  const toRemove = confirmId ? [...data.assignments, ...data.unavailable].find((a) => a.id === confirmId) : undefined
 
   const info = Object.fromEntries(data.zoneStats.map((z) => [z.zone.id, { assigned: z.assigned, required: z.required, coverage: z.coverage }]))
 
@@ -78,7 +82,7 @@ export default function Assignments() {
     <div>
       <PageHeader
         title="Assignments"
-        description={`${data.stats.assigned.toLocaleString()} ushers assigned across ${data.stats.zones} zones for ${data.event?.code}.`}
+        description={`${data.stats.assigned.toLocaleString()} ushers assigned across ${data.stats.zones} zones for ${data.event ? eventLabel(data.event) : ''}.`}
         actions={
           <>
             <Segmented id="aview" value={view} onChange={setView} options={[
@@ -106,7 +110,7 @@ export default function Assignments() {
           <div className="surface p-4 sm:p-5">
             <VenueMap
               zones={data.zones} mode="coverage" info={info} selectedZoneId={mapZone} onSelect={setMapZone}
-              positions={mapPositions} occupants={occupants}
+              positions={mapPositions} occupants={occupants} uncovered={uncovered}
               onSelectSpot={(zoneId, positionId) => (occupants[positionId] ? setMapZone(zoneId) : setAssign({ open: true, zoneId, positionId }))}
             />
           </div>
@@ -128,12 +132,13 @@ export default function Assignments() {
           <div className="flex flex-col gap-3 border-b border-line p-4 md:flex-row md:items-center">
             <SearchInput value={q} onChange={setQ} placeholder="Search member or phone" className="md:w-72" />
             <Select value={zone} onChange={setZone} label="Zone" className="md:w-48"><option value="">All zones</option>{data.zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}</Select>
-            <Select value={status} onChange={setStatus} label="Status" className="md:w-40"><option value="">Any status</option><option value="assigned">Assigned</option><option value="confirmed">Confirmed</option></Select>
+            <Select value={status} onChange={setStatus} label="Status" className="md:w-40"><option value="">Any status</option><option value="assigned">Assigned</option><option value="confirmed">Confirmed</option><option value="unavailable">Can’t make it</option></Select>
+            <Select value={duty} onChange={setDuty} label="Duty" className="md:w-44"><option value="">Any duty</option>{DUTIES.map((d) => <option key={d} value={d}>{DUTY_LABEL[d]}</option>)}</Select>
           </div>
           {loading ? <TableSkeleton /> : rows.length === 0 ? (
             data.assignments.length === 0
               ? <EmptyState icon={<ClipboardList className="h-5 w-5" />} title="No assignments yet" description="Assign ushers one by one, from the board, or in bulk from Members." action={<Button variant="primary" onClick={() => setAssign({ open: true })}><Plus className="h-4 w-4" /> Assign member</Button>} />
-              : <EmptyState icon={<SearchX className="h-5 w-5" />} title="No assignments match" description="Try another name or clear the filters." action={<Button variant="secondary" onClick={() => { setQ(''); setZone(''); setStatus('') }}>Clear filters</Button>} />
+              : <EmptyState icon={<SearchX className="h-5 w-5" />} title="No assignments match" description="Try another name or clear the filters." action={<Button variant="secondary" onClick={() => { setQ(''); setZone(''); setStatus(''); setDuty('') }}>Clear filters</Button>} />
           ) : (
             <>
               <div className="hidden overflow-x-auto md:block">
@@ -142,7 +147,7 @@ export default function Assignments() {
                     <tr>
                       <SortHeader label="Member" k="member" sort={sort} onSort={onSort} className="pl-5" />
                       <th className="px-4 py-3 text-left text-xs font-medium text-ink-500">Phone</th>
-                      <th className="hidden px-4 py-3 text-left text-xs font-medium text-ink-500 xl:table-cell">Event</th>
+                      <th className="hidden px-4 py-3 text-left text-xs font-medium text-ink-500 xl:table-cell">Duty</th>
                       <SortHeader label="Zone/Aisle" k="zone" sort={sort} onSort={onSort} />
                       <SortHeader label="Position" k="position" sort={sort} onSort={onSort} />
                       <th className="hidden px-4 py-3 text-left text-xs font-medium text-ink-500 lg:table-cell">Team Lead</th>
@@ -160,11 +165,11 @@ export default function Assignments() {
                           </button>
                         </td>
                         <td className="px-4 py-2.5 text-ink-600 tabular">{formatPhone(m.phone)}</td>
-                        <td className="hidden px-4 py-2.5 text-ink-600 xl:table-cell">{data.event?.code}</td>
+                        <td className="hidden px-4 py-2.5 text-ink-600 xl:table-cell">{DUTY_LABEL[dutyOf(p)]}</td>
                         <td className="px-4 py-2.5 font-medium text-ink-900">{z.name}</td>
                         <td className="px-4 py-2.5 text-ink-700">{p.name}</td>
                         <td className="hidden px-4 py-2.5 lg:table-cell">{a.isTeamLead ? <span className="inline-flex items-center gap-1 text-gold-700"><Crown className="h-3.5 w-3.5" /> Lead</span> : <span className="text-ink-500">{lead ? fullName(lead) : '—'}</span>}</td>
-                        <td className="px-4 py-2.5"><StatusBadge status={a.status} /></td>
+                        <td className="px-4 py-2.5"><StatusBadge status={a.status} />{a.status === 'unavailable' && a.unavailableReason && <div className="mt-1 max-w-[180px] truncate text-xs text-ink-500">{a.unavailableReason}</div>}</td>
                         <td className="px-4 py-2.5">
                           <div className="flex justify-end gap-1 opacity-60 transition-opacity group-hover:opacity-100">
                             <Button size="icon-sm" variant="ghost" onClick={() => setAssign({ open: true, memberId: m.id })} aria-label={`Edit ${fullName(m)}’s assignment`}><Pencil className="h-3.5 w-3.5" /></Button>
@@ -182,7 +187,7 @@ export default function Assignments() {
                     <Avatar first={m.firstName} last={m.lastName} size="sm" />
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-medium text-ink-900">{fullName(m)}</div>
-                      <div className="truncate text-xs text-ink-500">{z.name} · {p.name}</div>
+                      <div className="truncate text-xs text-ink-500">{z.name} · {p.name}{a.status === 'unavailable' && <span className="text-bad-600"> · can’t make it</span>}</div>
                     </div>
                     <Button size="icon-sm" variant="ghost" onClick={() => setAssign({ open: true, memberId: m.id })} aria-label="Edit"><Pencil className="h-3.5 w-3.5" /></Button>
                   </li>
@@ -202,7 +207,7 @@ export default function Assignments() {
         open={!!confirmId}
         onClose={() => setConfirmId(null)}
         title="Remove assignment?"
-        description={toRemove ? `${fullName(memberMap.get(toRemove.memberId)!)} will become unassigned for ${data.event?.code}.` : undefined}
+        description={toRemove ? `${fullName(memberMap.get(toRemove.memberId)!)} will become unassigned for ${data.event ? eventLabel(data.event) : ''}.` : undefined}
         confirmLabel="Remove"
         onConfirm={() => { confirmId && remove(confirmId); toast.success('Assignment removed.') }}
       />

@@ -22,18 +22,19 @@ export function FloorplanTexture({ className }: { className?: string }) {
   )
 }
 
-export function PublicNav({ tone = 'dark' }: { tone?: 'dark' | 'light' }) {
+export function PublicNav({ tone = 'dark', tga = false }: { tone?: 'dark' | 'light'; /** black notch for the TGA landing page */ tga?: boolean }) {
   const link = ({ isActive }: { isActive: boolean }) =>
-    cn('rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors', isActive ? 'bg-ink-900 text-white' : 'text-ink-600 hover:text-ink-900')
+    cn('rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors', tga ? (isActive ? 'tga-gold-bg text-tga-black' : 'text-white/65 hover:text-white') : isActive ? 'bg-ink-900 text-white' : 'text-ink-600 hover:text-ink-900')
   return (
     <header className="relative z-10 flex items-start justify-between px-5 pt-5 md:px-8">
       <Link to="/" aria-label="Global Roster Manager home" className="pt-1">
         <Logo light={tone === 'dark'} />
       </Link>
       {/* notched tab cut into the shell, as in the reference designs */}
-      <nav aria-label="Main" className="notch absolute left-1/2 top-0 hidden -translate-x-1/2 rounded-b-[24px] bg-canvas px-2 pb-2 pt-2 md:block" style={{ ['--notch' as string]: '#F3F0EA' }}>
+      <nav aria-label="Main" className={cn('notch absolute left-1/2 top-0 hidden -translate-x-1/2 rounded-b-[24px] px-2 pb-2 pt-2 md:block', tga ? 'bg-[#1A160F]' : 'bg-canvas')} style={{ ['--notch' as string]: tga ? '#1A160F' : '#F3F0EA' }}>
         <div className="flex items-center gap-1">
           <NavLink to="/" end className={link}>Find Assignment</NavLink>
+          <NavLink to="/team/login" className={link}>Coordinators</NavLink>
           <NavLink to="/help" className={link}>Help</NavLink>
         </div>
       </nav>
@@ -45,7 +46,7 @@ export function PublicNav({ tone = 'dark' }: { tone?: 'dark' | 'light' }) {
         )}
       >
         Admin Login
-        <ArrowUpRight className={cn('h-4 w-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5', tone === 'dark' ? 'text-gold-300' : 'text-wine-500')} />
+        <ArrowUpRight className={cn('h-4 w-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5', tone === 'dark' ? (tga ? 'text-tga-gold' : 'text-gold-300') : 'text-wine-500')} />
       </Link>
     </header>
   )
@@ -56,6 +57,7 @@ export function PublicFooter() {
     <footer className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-6 py-6 text-xs text-ink-500 sm:flex-row">
       <span>Koinonia Global · Ushering Department</span>
       <span className="flex gap-4">
+        <Link to="/team/login" className="hover:text-ink-800">Coordinators</Link>
         <Link to="/help" className="hover:text-ink-800">Help</Link>
         <Link to="/admin/login" className="hover:text-ink-800">Administrators</Link>
       </span>

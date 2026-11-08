@@ -111,3 +111,29 @@ export function toCSV(rows: Record<string, string | number | boolean | undefined
   }
   return [headers.join(','), ...rows.map((r) => headers.map((h) => esc(r[h])).join(','))].join('\n')
 }
+
+/* ---------- sessions ---------- */
+
+type SessionLike = { name: string; code: string; date: string; series?: string; day?: number; session?: 'morning' | 'evening'; startTime?: string }
+
+export const SESSION_LABEL = { morning: 'Morning', evening: 'Evening' } as const
+
+/** "Wed 18 Nov · Morning" */
+export function sessionShort(e: SessionLike) {
+  const d = formatDate(e.date, { weekday: 'short', day: 'numeric', month: 'short' })
+  return e.session ? `${d} · ${SESSION_LABEL[e.session]}` : d
+}
+
+/** "Day 1 · Morning session" or "" for a single-session event */
+export function sessionLine(e: SessionLike) {
+  return [e.day ? `Day ${e.day}` : '', e.session ? `${SESSION_LABEL[e.session]} session` : ''].filter(Boolean).join(' · ')
+}
+
+/** "TGA 2026 · Day 1 Morning", or the event code */
+export function eventLabel(e: SessionLike) {
+  if (!e.series) return e.code
+  return `${e.series} · ${[e.day ? `Day ${e.day}` : '', e.session ? SESSION_LABEL[e.session] : ''].filter(Boolean).join(' ')}`
+}
+
+/** sort key that puts a series' sessions in service order */
+export const sessionOrder = (e: SessionLike) => `${e.date}${e.session === 'evening' ? 'b' : 'a'}`

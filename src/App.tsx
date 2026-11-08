@@ -17,6 +17,9 @@ import Rosters from '@/pages/admin/Rosters'
 import Reports from '@/pages/admin/Reports'
 import Settings from '@/pages/admin/Settings'
 import Import from '@/pages/admin/Import'
+import Team from '@/pages/admin/Team'
+import TeamLogin from '@/pages/team/TeamLogin'
+import TeamHome from '@/pages/team/TeamHome'
 import { useStore } from '@/store/useStore'
 
 
@@ -50,6 +53,8 @@ export default function App() {
           <Route path="/" element={<Lookup />} />
           <Route path="/assignment" element={<AssignmentResult />} />
           <Route path="/help" element={<Help />} />
+          <Route path="/team/login" element={<TeamLogin />} />
+          <Route path="/team" element={<TeamHome />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<RequireAdmin><AdminLayout /></RequireAdmin>}>
             <Route index element={<Overview />} />
@@ -60,6 +65,7 @@ export default function App() {
             <Route path="members/:id" element={<Members />} />
             <Route path="assignments" element={<Assignments />} />
             <Route path="positions" element={<Positions />} />
+            <Route path="team" element={<Team />} />
             <Route path="import" element={<Import />} />
             <Route path="reports" element={<Reports />} />
             <Route path="settings" element={<Settings />} />

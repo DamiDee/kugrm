@@ -1,11 +1,13 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowRight, CalendarDays, CheckCircle2, ClipboardList, Grid2x2, ListTree, Plus, Upload, UserMinus, Users, Activity as ActivityIcon, Send, MapPin, Clock3 } from 'lucide-react'
+import { ArrowRight, CalendarDays, CalendarX2, CheckCircle2, ClipboardList, Grid2x2, ListTree, Network, Plus, Upload, UserMinus, Users, Activity as ActivityIcon, Send, MapPin, Clock3 } from 'lucide-react'
 import { useState } from 'react'
 import { useStore } from '@/store/useStore'
-import { positionsOf, spotOccupants, useEventData, useMemberMap } from '@/lib/selectors'
+import { positionsOf, sessionsOf, spotOccupants, uncoveredSpots, useEventData, useMemberMap } from '@/lib/selectors'
+import { DUTIES, DUTY_LABEL, dutyOf } from '@/data/duties'
+import { Absences } from '@/components/admin/Absences'
 import { useFirstLoad } from '@/lib/hooks'
-import { cn, formatDate, formatTime, greeting, timeAgo } from '@/lib/utils'
+import { cn, eventLabel, formatDate, formatTime, greeting, sessionLine, sessionOrder, timeAgo } from '@/lib/utils'
 import { AnimatedNumber, EmptyState, MetricCard, ProgressBar } from '@/components/ui/misc'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/Badge'
@@ -14,7 +16,7 @@ import { EventSelector } from '@/components/admin/EventSelector'
 import { AssignDialog } from '@/components/admin/AssignDialog'
 import { VenueMap } from '@/components/venue/VenueMap'
 
-const activityIcon = { assign: ClipboardList, event: CalendarDays, import: Upload, publish: Send, member: Users, position: ListTree }
+const activityIcon = { assign: ClipboardList, event: CalendarDays, import: Upload, publish: Send, member: Users, position: ListTree, absence: CalendarX2, team: Network }
 
 export default function Overview() {
   const admin = useStore((s) => s.admin)
@@ -25,7 +27,7 @@ export default function Overview() {
   const { event, stats, zoneStats } = data
   const loading = useFirstLoad('overview')
   const navigate = useNavigate()
-  const [assignOpen, setAssignOpen] = useState(false)
+  const [assign, setAssign] = useState<{ open: boolean; zoneId?: string; positionId?: string }>({ open: false })
 
   if (!event) return <EmptyState icon={<CalendarDays className="h-5 w-5" />} title="No events yet" description="Create your first event to begin building a roster." action={<Button variant="primary" onClick={() => navigate('/admin/events?new=1')}><Plus className="h-4 w-4" /> Create Event</Button>} />
 
@@ -43,7 +45,7 @@ export default function Overview() {
         <div className="flex flex-wrap items-center gap-2">
           <EventSelector className="md:hidden" />
           <Button variant="secondary" onClick={() => navigate('/admin/import')}><Upload className="h-4 w-4" /> Import</Button>
-          <Button variant="primary" onClick={() => setAssignOpen(true)}><Plus className="h-4 w-4" /> Assign member</Button>
+          <Button variant="primary" onClick={() => setAssign({ open: true })}><Plus className="h-4 w-4" /> Assign member</Button>
         </div>
       </div>
 
@@ -55,10 +57,11 @@ export default function Overview() {
             <span className="mt-0.5 text-base font-semibold">{formatDate(event.date, { day: 'numeric' })}</span>
           </div>
           <div className="min-w-0">
-            <div className="truncate font-medium">{event.name}</div>
+            <div className="truncate font-medium">{event.name}{sessionLine(event) && <span className="text-gold-300"> · {sessionLine(event)}</span>}</div>
             <div className="mt-0.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-white/55">
-              <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" />{event.venue}</span>
-              <span className="flex items-center gap-1.5"><Clock3 className="h-3.5 w-3.5" />Report {formatTime(event.reportingTime)}</span>
+              <span className="flex items-center gap-1.5"><CalendarDays className="h-3.5 w-3.5" />{formatDate(event.date, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
+              <span className="flex items-center gap-1.5"><Clock3 className="h-3.5 w-3.5" />Report {formatTime(event.reportingTime)}{event.startTime && ` · starts ${formatTime(event.startTime)}`}</span>
+              <span className="flex min-w-0 items-center gap-1.5"><MapPin className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{event.venue.split(',')[0]}</span></span>
             </div>
           </div>
         </div>
@@ -84,6 +87,13 @@ export default function Overview() {
           <MetricCard label="Coverage" value={stats.coverage} decimals={1} suffix="%" icon={<ActivityIcon className="h-4 w-4" />} tone="wine" hint="of all members" />
         </div>
       )}
+
+      <SessionStrip />
+
+      <div className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
+        <DutyBreakdown data={data} />
+        <Absences data={data} members={memberMap} onCover={(zoneId, positionId) => setAssign({ open: true, zoneId, positionId })} />
+      </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
         {/* coverage */}
@@ -134,7 +144,7 @@ export default function Overview() {
             </div>
             <Link to="/admin/assignments?view=map" className="text-sm font-medium text-wine-600 hover:text-wine-700">Full map</Link>
           </div>
-          <VenueMap compact zones={data.zones} mode="coverage" info={info} positions={positionsOf(data)} occupants={spotOccupants(data, memberMap)} onSelect={(id) => navigate(`/admin/assignments?view=map&zone=${id}`)} />
+          <VenueMap compact zones={data.zones} mode="coverage" info={info} positions={positionsOf(data)} occupants={spotOccupants(data, memberMap)} uncovered={uncoveredSpots(data, memberMap)} onSelect={(id) => navigate(`/admin/assignments?view=map&zone=${id}`)} />
         </section>
       </div>
 
@@ -162,7 +172,7 @@ export default function Overview() {
         </section>
         <UpcomingEvents />
       </div>
-      <AssignDialog open={assignOpen} onClose={() => setAssignOpen(false)} />
+      <AssignDialog open={assign.open} onClose={() => setAssign({ open: false })} zoneId={assign.zoneId} positionId={assign.positionId} />
     </div>
   )
 }
@@ -192,7 +202,7 @@ function Donut({ value, assigned, remaining }: { value: number; assigned: number
 
 function UpcomingEvents() {
   const events = useStore((s) => s.events)
-  const list = [...events].filter((e) => e.status !== 'archived' && e.status !== 'completed').sort((a, b) => a.date.localeCompare(b.date))
+  const list = [...events].filter((e) => e.status !== 'archived' && e.status !== 'completed').sort((a, b) => sessionOrder(a).localeCompare(sessionOrder(b)))
   return (
     <section className="surface" aria-labelledby="up-h">
       <div className="flex items-center justify-between px-6 pb-2 pt-5">
@@ -208,13 +218,77 @@ function UpcomingEvents() {
                 <span className="mt-0.5 text-[15px] font-semibold text-ink-900">{formatDate(e.date, { day: 'numeric' })}</span>
               </div>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-ink-900">{e.name}</div>
-                <div className="text-xs text-ink-500">Report {formatTime(e.reportingTime)}</div>
+                <div className="truncate text-sm font-medium text-ink-900">{e.series ? eventLabel(e) : e.name}</div>
+                <div className="text-xs text-ink-500">Report {formatTime(e.reportingTime)}{e.startTime && ` · starts ${formatTime(e.startTime)}`}</div>
               </div>
               <StatusBadge status={e.rosterStatus === 'published' ? 'published' : 'unpublished'} />
             </Link>
           </li>
         ))}
+      </ul>
+    </section>
+  )
+}
+
+/** The sessions of the programme being worked on, to switch between them in one tap. */
+function SessionStrip() {
+  const events = useStore((s) => s.events)
+  const activeEventId = useStore((s) => s.activeEventId)
+  const setActive = useStore((s) => s.setActiveEvent)
+  const active = events.find((e) => e.id === activeEventId)
+  if (!active?.series) return null
+  const sessions = sessionsOf(events, active)
+  return (
+    <nav aria-label={`${active.series} sessions`} className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+      <ul className="flex gap-2">
+        {sessions.map((e) => {
+          const on = e.id === activeEventId
+          return (
+            <li key={e.id} className="shrink-0">
+              <button onClick={() => setActive(e.id)} aria-pressed={on} className={cn('flex w-[112px] flex-col items-start rounded-xl px-3 py-2 text-left ring-1 transition-colors', on ? 'bg-ink-950 text-white ring-ink-950' : 'bg-white text-ink-800 ring-line hover:ring-line-strong')}>
+                <span className={cn('text-[11px] font-semibold uppercase tracking-[0.08em]', on ? 'text-gold-300' : 'text-ink-500')}>Day {e.day} · {formatDate(e.date, { weekday: 'short', day: 'numeric' })}</span>
+                <span className="text-sm font-semibold">{e.session === 'evening' ? 'Evening' : 'Morning'}</span>
+                <span className={cn('mt-0.5 flex items-center gap-1 text-[11px]', on ? 'text-white/60' : 'text-ink-500')}>
+                  <span className={cn('h-1.5 w-1.5 rounded-full', e.rosterStatus === 'published' ? 'bg-ok-500' : 'bg-warn-500')} />
+                  {e.rosterStatus === 'published' ? 'Published' : 'Draft'}
+                </span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </nav>
+  )
+}
+
+/** Assigned against needed for each duty: seats, crowd control, greeters, doors and the rest. */
+function DutyBreakdown({ data }: { data: ReturnType<typeof useEventData> }) {
+  const rows = DUTIES.map((d) => {
+    const pos = [...data.positionById.values()].filter((p) => dutyOf(p) === d)
+    const ids = new Set(pos.map((p) => p.id))
+    const assigned = data.assignments.filter((a) => ids.has(a.positionId)).length
+    const required = pos.reduce((n, p) => n + (p.required ?? 0), 0)
+    return { d, assigned, required }
+  }).filter((r) => r.required > 0)
+  return (
+    <section className="surface p-5" aria-labelledby="duty-h">
+      <h2 id="duty-h" className="font-semibold text-ink-900">By duty</h2>
+      <p className="text-sm text-ink-500">Ushers in place for each kind of duty this session</p>
+      <ul className="mt-4 grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
+        {rows.map(({ d, assigned, required }, i) => {
+          const c = Math.min(100, Math.round((assigned / required) * 100))
+          return (
+            <li key={d}>
+              <Link to={`/admin/assignments?duty=${d}`} className="group block">
+                <div className="mb-1.5 flex items-baseline justify-between text-sm">
+                  <span className="font-medium text-ink-800 group-hover:text-wine-600">{DUTY_LABEL[d]}</span>
+                  <span className="tabular text-ink-500">{assigned}/{required}</span>
+                </div>
+                <ProgressBar value={c} delay={i * 0.03} tone={c >= 95 ? 'ok' : c >= 85 ? 'gold' : 'wine'} />
+              </Link>
+            </li>
+          )
+        })}
       </ul>
     </section>
   )

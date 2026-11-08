@@ -71,7 +71,7 @@ export default function Events() {
                     <span className="truncate font-medium text-ink-900">{e.name}</span>
                     {e.id === s.activeEventId && <span className="hidden rounded-full bg-ink-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white sm:inline">Working on</span>}
                   </div>
-                  <div className="mt-0.5 text-[13px] text-ink-500"><span className="font-mono text-xs">{e.code}</span> · {formatShortDate(e.date)} · Report {formatTime(e.reportingTime)}</div>
+                  <div className="mt-0.5 text-[13px] text-ink-500"><span className="font-mono text-xs">{e.code}</span> · {formatShortDate(e.date)}{e.session && ` · ${e.session === 'evening' ? 'Evening' : 'Morning'}`} · Report {formatTime(e.reportingTime)}</div>
                 </div>
                 <div className="hidden truncate text-sm text-ink-600 md:block">{e.venue}</div>
                 <div className="hidden text-sm md:block"><span className="font-semibold text-ink-900 tabular">{(counts.get(e.id) ?? 0).toLocaleString()}</span> <span className="text-ink-500">assigned</span></div>

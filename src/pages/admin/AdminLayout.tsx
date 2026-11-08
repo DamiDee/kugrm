@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
-  Bell, BarChart3, CalendarDays, ClipboardList, LayoutDashboard, ListTree, LogOut, Menu, Search, Settings as SettingsIcon, Upload, Users, X, Rows3, CheckCircle2, AlertTriangle, Info,
+  Bell, BarChart3, CalendarDays, ClipboardList, LayoutDashboard, ListTree, LogOut, Menu, Search, Settings as SettingsIcon, Upload, Users, X, Rows3, CheckCircle2, AlertTriangle, Info, Network,
 } from 'lucide-react'
 import { useStore } from '@/store/useStore'
 import { cn, timeAgo } from '@/lib/utils'
@@ -21,6 +21,7 @@ const NAV = [
   { to: '/admin/members', label: 'Members', icon: Users },
   { to: '/admin/assignments', label: 'Assignments', icon: ClipboardList },
   { to: '/admin/positions', label: 'Positions', icon: ListTree },
+  { to: '/admin/team', label: 'Team', icon: Network },
   { to: '/admin/import', label: 'Imports', icon: Upload },
   { to: '/admin/reports', label: 'Reports', icon: BarChart3 },
   { to: '/admin/settings', label: 'Settings', icon: SettingsIcon },

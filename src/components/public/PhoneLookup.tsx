@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowRight, Phone, Search } from 'lucide-react'
 import { cn, formatPhoneInput, isValidNigerianPhone, normalizePhone } from '@/lib/utils'
 
-export function PhoneLookup({ initial = '', className, onDark = true }: { initial?: string; className?: string; onDark?: boolean }) {
+export function PhoneLookup({ initial = '', className, onDark = true, tga = false }: { initial?: string; className?: string; onDark?: boolean; /** gold button, for the TGA landing page */ tga?: boolean }) {
   const [value, setValue] = useState(formatPhoneInput(initial))
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -27,7 +27,7 @@ export function PhoneLookup({ initial = '', className, onDark = true }: { initia
       <div
         className={cn(
           'relative overflow-hidden rounded-[22px] bg-white p-2 shadow-float ring-1 transition-shadow duration-200',
-          error ? 'ring-bad-500/40' : 'ring-black/5 focus-within:ring-wine-400/50 focus-within:shadow-[0_0_0_6px_rgba(147,48,78,.10),0_24px_64px_-16px_rgba(11,17,32,.28)]',
+          error ? 'ring-bad-500/40' : tga ? 'ring-black/5 focus-within:ring-tga-gold/60 focus-within:shadow-[0_0_0_6px_rgba(217,180,90,.18),0_24px_64px_-16px_rgba(0,0,0,.5)]' : 'ring-black/5 focus-within:ring-wine-400/50 focus-within:shadow-[0_0_0_6px_rgba(147,48,78,.10),0_24px_64px_-16px_rgba(11,17,32,.28)]',
         )}
       >
         <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
@@ -58,7 +58,8 @@ export function PhoneLookup({ initial = '', className, onDark = true }: { initia
             whileTap={{ scale: 0.98 }}
             layout
             className={cn(
-              'relative flex h-14 items-center justify-center gap-2.5 overflow-hidden rounded-2xl bg-wine-600 px-7 text-[15px] font-semibold text-white transition-colors hover:bg-wine-700 sm:h-auto sm:min-w-[210px]',
+              'relative flex h-14 items-center justify-center gap-2.5 overflow-hidden rounded-2xl px-7 text-[15px] font-semibold transition-colors sm:h-auto sm:min-w-[210px]',
+              tga ? 'tga-gold-bg text-tga-black hover:brightness-105' : 'bg-wine-600 text-white hover:bg-wine-700',
               loading && 'bg-ink-900 hover:bg-ink-900',
             )}
           >

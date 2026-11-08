@@ -37,6 +37,7 @@ const STATUS: Record<string, { tone: Tone; label: string }> = {
   unassigned: { tone: 'warn', label: 'Unassigned' },
   inactive: { tone: 'neutral', label: 'Inactive' },
   awaiting: { tone: 'warn', label: 'Awaiting Assignment' },
+  unavailable: { tone: 'danger', label: 'Can’t make it' },
 }
 
 export function StatusBadge({ status, className }: { status: keyof typeof STATUS | string; className?: string }) {
