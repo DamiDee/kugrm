@@ -5,7 +5,6 @@ export default {
     extend: {
       fontFamily: {
         sans: ['Manrope', 'Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
-        display: ['Oswald', '"Bebas Neue"', '"Arial Narrow"', 'Impact', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       colors: {

@@ -36,7 +36,7 @@ export default function TeamLogin() {
         </header>
         <main className="flex flex-1 flex-col justify-center py-10">
           <span className="inline-flex w-fit items-center gap-2 rounded-full bg-white/[.07] px-3 py-1 text-xs font-medium text-tga-gold ring-1 ring-white/10"><ShieldCheck className="h-3.5 w-3.5" /> Coordinators and leaders</span>
-          <h1 className="mt-5 font-display text-[44px] uppercase leading-[0.95] tracking-[0.01em]">Your team,<br /><span className="tga-gold-text">every session.</span></h1>
+          <h1 className="mt-5 text-[44px] font-light leading-[1.02] tracking-[-0.035em]">Your team,<br /><span className="tga-gold-text">every session.</span></h1>
           <p className="mt-4 text-[15px] leading-relaxed text-white/60">Sign in with your registered phone number to see your sections, the ushers in them, and anyone who can’t make it.</p>
           <form onSubmit={submit} className="mt-8 rounded-[22px] bg-white p-5 text-ink-900" noValidate>
             <Field label="Phone number" htmlFor="tl-p" error={error}>

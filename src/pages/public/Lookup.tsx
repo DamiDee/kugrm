@@ -58,9 +58,9 @@ export default function Lookup() {
                   Koinonia Global · Ushering Department
                 </span>
                 {event?.series && (
-                  <p className="mt-6 font-display text-[15px] font-semibold uppercase tracking-[0.32em] text-tga-gold">The {event.name.replace(/^The /, '')}</p>
+                  <p className="mt-6 text-[14px] font-medium tracking-[-0.005em] text-tga-gold">The {event.name.replace(/^The /, '')}</p>
                 )}
-                <h1 id="find-heading" className="mt-3 font-display text-[52px] font-bold uppercase leading-[0.92] tracking-[0.005em] sm:text-[72px] lg:text-[88px]">
+                <h1 id="find-heading" className="mt-3 text-[52px] font-light leading-[1.02] tracking-[-0.04em] sm:text-[72px] lg:text-[88px]">
                   Find your
                   <br />
                   <span className="tga-gold-text">post.</span>
@@ -103,20 +103,20 @@ export default function Lookup() {
                     </Link>
                   </div>
                   {range ? (
-                    <div className="relative mt-5 font-display uppercase leading-[0.95]">
-                      <div className="text-[44px] font-bold sm:text-[52px]">{range.days}</div>
-                      <div className="text-[34px] font-bold text-white/90 sm:text-[40px]">{range.month}</div>
+                    <div className="relative mt-5 leading-[1.05] tracking-[-0.03em]">
+                      <div className="text-[44px] font-light sm:text-[52px]">{range.days}</div>
+                      <div className="text-[34px] font-light text-white/90 sm:text-[40px]">{range.month}</div>
                     </div>
                   ) : (
                     <h2 className="relative mt-5 text-[22px] font-medium">{event.name}</h2>
                   )}
                   {times && (
-                    <div className="relative mt-4 inline-block bg-tga-red px-3 py-1.5 font-display text-[22px] font-bold uppercase tracking-[0.02em]">{times}</div>
+                    <div className="relative mt-4 inline-block bg-tga-red px-3 py-1.5 text-[20px] font-semibold tracking-[-0.01em]">{times}</div>
                   )}
                   <div className="relative mt-5 flex items-start gap-3">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[.06] text-tga-gold"><MapPin className="h-4 w-4" /></span>
                     <div>
-                      <div className="font-display text-[17px] font-semibold uppercase tracking-[0.02em]">{venue[0]}</div>
+                      <div className="text-[16px] font-semibold tracking-[-0.01em]">{venue[0]}</div>
                       <div className="text-[13px] leading-snug text-white/55">{venue.slice(1).join(',').trim()}</div>
                     </div>
                   </div>
@@ -137,7 +137,7 @@ export default function Lookup() {
                 </div>
                 <div className="flex items-center justify-between gap-4 rounded-[26px] bg-tga-cream p-5 text-tga-black">
                   <div>
-                    <div className="font-display text-[34px] font-bold leading-none tabular">{published ? stats.assigned.toLocaleString() : '—'}</div>
+                    <div className="text-[34px] font-semibold leading-none tracking-[-0.03em] tabular">{published ? stats.assigned.toLocaleString() : '—'}</div>
                     <div className="mt-1.5 text-xs text-tga-black/60">{published ? `Ushers serving ${event.series ? 'Day ' + event.day + (event.session ? `, ${event.session}` : '') : event.code}` : 'Roster not yet published'}</div>
                   </div>
                   <div className="text-right text-xs text-tga-black/60">
