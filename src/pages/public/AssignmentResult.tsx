@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowLeft, CalendarClock, CalendarX2, ChevronDown, History, Hourglass, Mail, Phone, PhoneOff, RotateCcw, Search, Undo2, UserCheck } from 'lucide-react'
 import { useStore } from '@/store/useStore'
+import { LIVE, type ApiError } from '@/lib/api'
+import { availableLive, confirmLive, lookupLive, unavailableLive, useLiveMap } from '@/lib/live'
 import { lookupByPhone, positionsOf, spotOccupants, useEventData, useMemberMap, type AssignmentView, type LookupResult, type SessionEntry } from '@/lib/selectors'
 import { cn, eventLabel, formatDate, formatPhone, formatShortDate, formatTime, fullName, sessionLine, sessionShort, telHref, SESSION_LABEL } from '@/lib/utils'
 import { Field, Logo, Segmented } from '@/components/ui/misc'
@@ -18,6 +20,9 @@ import { PublicFooter } from '@/components/public/PublicShell'
 
 const fade = { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.4, ease: [0.2, 0.8, 0.2, 1] } }
 
+/** Live mode: the usher's number and a way to reload after they change something. */
+const LiveCtx = createContext<{ phone: string; reload: () => Promise<void> }>({ phone: '', reload: async () => {} })
+
 export default function AssignmentResult() {
   const [params] = useSearchParams()
   const phone = params.get('phone') ?? ''
@@ -28,7 +33,20 @@ export default function AssignmentResult() {
   const activeEventId = useStore((s) => s.activeEventId)
   const members = useStore((s) => s.members)
   const [ready, setReady] = useState(false)
-  const result = useMemo<LookupResult | null>(() => (phone ? lookupByPhone(phone) : null), [phone, assignments, events, activeEventId, members])
+  const demoResult = useMemo<LookupResult | null>(() => (!LIVE && phone ? lookupByPhone(phone) : null), [phone, assignments, events, activeEventId, members])
+  const [liveResult, setLiveResult] = useState<LookupResult | null>(null)
+  const [liveError, setLiveError] = useState('')
+  const reload = useCallback(async () => {
+    try {
+      setLiveResult(await lookupLive(phone))
+      setLiveError('')
+    } catch (e) {
+      setLiveError((e as Error).message)
+    }
+  }, [phone])
+  useEffect(() => { if (LIVE && phone) void reload() }, [phone, reload])
+  const result = LIVE ? liveResult : demoResult
+  const live = useMemo(() => ({ phone, reload }), [phone, reload])
 
   useEffect(() => {
     if (!phone) navigate('/', { replace: true })
@@ -47,7 +65,13 @@ export default function AssignmentResult() {
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-4 pb-10 pt-6 sm:px-6 sm:pt-10">
-        {!ready || !result ? <ResultSkeleton /> : <ResultBody result={result} />}
+        {liveError ? (
+          <div className="surface p-8 text-center">
+            <h1 className="text-xl font-semibold tracking-tight text-ink-900">We couldn’t check the roster</h1>
+            <p className="mt-2 text-[15px] text-ink-500">{liveError}</p>
+            <Button className="mt-5" variant="primary" onClick={() => void reload()}><RotateCcw className="h-4 w-4" /> Try again</Button>
+          </div>
+        ) : !ready || !result ? <ResultSkeleton /> : <LiveCtx.Provider value={live}><ResultBody result={result} /></LiveCtx.Provider>}
       </main>
       <PublicFooter />
     </div>
@@ -172,11 +196,24 @@ function Found({ view }: { view: AssignmentView }) {
   const confirmAssignment = useStore((s) => s.confirmAssignment)
   const [showAll, setShowAll] = useState(false)
   const [away, setAway] = useState(false)
-  const eventZones = zones.filter((z) => z.eventId === current.event.id)
   const data = useEventData(current.event.id)
   const memberMap = useMemberMap()
-  const occupants = useMemo(() => spotOccupants(data, memberMap, current.zone.id), [data, memberMap, current.zone.id])
-  const team = current.teammates.filter((t) => t.isYou || data.assignments.some((a) => a.memberId === t.member.id))
+  const live = useContext(LiveCtx)
+  const liveMap = useLiveMap(current.event.id, current.position, current.teammates)
+  const eventZones = LIVE ? liveMap.zones : zones.filter((z) => z.eventId === current.event.id)
+  const demoOccupants = useMemo(() => spotOccupants(data, memberMap, current.zone.id), [data, memberMap, current.zone.id])
+  const occupants = LIVE ? liveMap.occupants : demoOccupants
+  const mapPositions = LIVE ? liveMap.positions : positionsOf(data)
+  // the server already leaves out teammates who can't make it
+  const team = LIVE ? current.teammates : current.teammates.filter((t) => t.isYou || data.assignments.some((a) => a.memberId === t.member.id))
+  const confirm = async () => {
+    try {
+      if (LIVE) { await confirmLive(current.assignment.id, live.phone); await live.reload() } else confirmAssignment(current.assignment.id)
+      toast.success('Attendance confirmed', 'Your lead can now see you’re coming.')
+    } catch (e) {
+      toast.error('Couldn’t confirm your attendance.', (e as Error).message)
+    }
+  }
   const visible = showAll ? team : team.slice(0, 8)
 
   // group teammates by position for larger teams
@@ -193,7 +230,7 @@ function Found({ view }: { view: AssignmentView }) {
     <div className="space-y-8">
       <AssignmentCard
         view={current}
-        onConfirm={settings.allowSelfConfirm ? () => { confirmAssignment(current.assignment.id); toast.success('Attendance confirmed', 'Your lead can now see you’re coming.') } : undefined}
+        onConfirm={settings.allowSelfConfirm ? () => void confirm() : undefined}
       />
       <div className="-mt-4 flex flex-col items-start justify-between gap-3 rounded-2xl border border-line bg-white px-5 py-4 sm:flex-row sm:items-center">
         <p className="text-sm text-ink-600">Can’t make {sessionShort(current.event)}? Tell us, and your {current.position.spot ? 'seat' : 'place'} will be given to someone else for this session.</p>
@@ -208,7 +245,7 @@ function Found({ view }: { view: AssignmentView }) {
             <p className="text-sm text-ink-500">{current.position.spot ? 'Your usher seat is marked on the floor plan.' : `${current.zone.name} is highlighted on the floor plan.`}</p>
           </div>
         </div>
-        <VenueMap zones={eventZones} mode="locate" highlightZoneId={current.zone.id} highlightPositionId={current.position.id} positions={positionsOf(data)} occupants={occupants} pinLabel={current.position.spot ? 'You stand here' : `You · ${current.position.name}`} />
+        <VenueMap zones={eventZones} mode="locate" highlightZoneId={current.zone.id} highlightPositionId={current.position.id} positions={mapPositions} occupants={occupants} pinLabel={current.position.spot ? 'You stand here' : `You · ${current.position.name}`} />
       </motion.section>
 
       {current.event.instructions && (
@@ -266,8 +303,16 @@ function Found({ view }: { view: AssignmentView }) {
 function AwayDialog({ open, onClose, view }: { open: boolean; onClose: () => void; view: AssignmentView }) {
   const markUnavailable = useStore((s) => s.markUnavailable)
   const [reason, setReason] = useState('')
-  const submit = () => {
-    markUnavailable(view.assignment.id, reason)
+  const live = useContext(LiveCtx)
+  const submit = async () => {
+    if (LIVE) {
+      try {
+        await unavailableLive(view.assignment.id, live.phone, reason)
+        await live.reload()
+      } catch (e) {
+        return toast.error('That wasn’t saved.', (e as Error).message)
+      }
+    } else markUnavailable(view.assignment.id, reason)
     toast.success('Thanks for letting us know', `Your ${view.position.spot ? 'seat' : 'place'} for ${sessionShort(view.event)} is now open for someone else.`)
     setReason('')
     onClose()
@@ -282,7 +327,7 @@ function AwayDialog({ open, onClose, view }: { open: boolean; onClose: () => voi
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Keep my place</Button>
-          <Button variant="danger" onClick={submit}>I can’t make it</Button>
+          <Button variant="danger" onClick={() => void submit()}>I can’t make it</Button>
         </>
       }
     >
@@ -295,7 +340,19 @@ function AwayDialog({ open, onClose, view }: { open: boolean; onClose: () => voi
 
 function AwayPanel({ view }: { view: AssignmentView }) {
   const undo = useStore((s) => s.undoUnavailable)
+  const live = useContext(LiveCtx)
+  const backLive = async () => {
+    try {
+      await availableLive(view.assignment.id, live.phone)
+      await live.reload()
+      toast.success('You’re back on the roster', `${view.zone.name} · ${view.position.name}`)
+    } catch (e) {
+      if ((e as ApiError).code === 'SPOT_COVERED') toast.error('Your place has been given to someone else', 'Call your coordinator to be placed again.')
+      else toast.error('That wasn’t saved.', (e as Error).message)
+    }
+  }
   const back = () => {
+    if (LIVE) return void backLive()
     if (undo(view.assignment.id)) toast.success('You’re back on the roster', `${view.zone.name} · ${view.position.name}`)
     else toast.error('Your place has been given to someone else', 'Call your coordinator to be placed again.')
   }

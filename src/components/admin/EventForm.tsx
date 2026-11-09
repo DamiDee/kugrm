@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '@/store/useStore'
+import { LIVE } from '@/lib/api'
+import { createEventLive } from '@/lib/live'
 import type { MinistryEvent } from '@/data/types'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -17,7 +19,7 @@ export function EventForm({ open, onClose, event, onCreated }: { open: boolean; 
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF((s) => ({ ...s, [k]: e.target.value }))
 
-  const save = (asDraft: boolean) => {
+  const save = async (asDraft: boolean) => {
     const e: Record<string, string> = {}
     if (!f.name.trim()) e.name = 'Give the event a name'
     if (!f.code.trim()) e.code = 'Add a short code, e.g. TGA 2026'
@@ -34,7 +36,12 @@ export function EventForm({ open, onClose, event, onCreated }: { open: boolean; 
       updateEvent(event.id, payload)
       toast.success('Event updated.')
     } else {
-      const id = createEvent({ ...payload, status: asDraft ? 'draft' : 'active' })
+      let id: string
+      try {
+        id = LIVE ? await createEventLive({ ...payload, status: asDraft ? 'draft' : 'active' }) : createEvent({ ...payload, status: asDraft ? 'draft' : 'active' })
+      } catch (err) {
+        return toast.error('Event not created.', (err as Error).message)
+      }
       toast.success(asDraft ? 'Event saved as draft.' : 'Event created.', 'Positions were copied from the current event.')
       onCreated?.(id)
     }

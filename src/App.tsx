@@ -21,6 +21,7 @@ import Team from '@/pages/admin/Team'
 import TeamLogin from '@/pages/team/TeamLogin'
 import TeamHome from '@/pages/team/TeamHome'
 import { useStore } from '@/store/useStore'
+import { LIVE } from '@/lib/api'
 
 
 function ScrollTop() {
@@ -34,7 +35,9 @@ function ScrollTop() {
 function RequireAdmin({ children }: { children: React.ReactNode }) {
   const admin = useStore((s) => s.admin)
   const loc = useLocation()
+  const ready = useStore((s) => s.liveReady)
   if (!admin) return <Navigate to="/admin/login" replace state={{ from: loc.pathname }} />
+  if (LIVE && !ready) return <div role="status" className="grid min-h-[100dvh] place-items-center bg-canvas text-sm text-ink-500">Loading the roster…</div>
   return <>{children}</>
 }
 

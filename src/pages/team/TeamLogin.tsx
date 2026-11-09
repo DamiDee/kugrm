@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, ShieldCheck } from 'lucide-react'
 import { useStore } from '@/store/useStore'
+import { LIVE } from '@/lib/api'
+import { teamRequestCode, teamVerify } from '@/lib/live'
 import { DEMO } from '@/data/mock'
 import { formatPhone, formatPhoneInput, isValidNigerianPhone } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
@@ -18,9 +20,35 @@ export default function TeamLogin() {
   const [phone, setPhone] = useState('')
   const [error, setError] = useState('')
 
+  const [code, setCode] = useState('')
+  const [sent, setSent] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const submitLive = async () => {
+    setBusy(true)
+    try {
+      if (!sent) {
+        await teamRequestCode(phone)
+        setSent(true)
+      } else {
+        await teamVerify(phone, code.trim())
+        navigate('/team', { replace: true })
+      }
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const submit = (e?: React.SyntheticEvent) => {
     e?.preventDefault()
     if (!isValidNigerianPhone(phone)) return setError('Enter the 11-digit number registered with the department.')
+    if (LIVE) {
+      if (sent && !/^\d{6}$/.test(code.trim())) return setError('Enter the 6-digit code we sent you.')
+      setError('')
+      return void submitLive()
+    }
     const r = teamLogin(phone)
     if (r === 'not-found') return setError('No member has this number. Check it, or ask the department secretariat.')
     if (r === 'not-team') return setError('This number isn’t set up as a coordinator or leader. Ushers can find their assignment on the home page.')
@@ -42,14 +70,19 @@ export default function TeamLogin() {
             <Field label="Phone number" htmlFor="tl-p" error={error}>
               <input
                 id="tl-p" className="field h-12 text-[17px] tabular" inputMode="tel" autoComplete="tel" placeholder="0802 000 1122"
-                value={phone} onChange={(e) => { setPhone(formatPhoneInput(e.target.value)); setError('') }}
+                value={phone} disabled={sent} onChange={(e) => { setPhone(formatPhoneInput(e.target.value)); setError('') }}
               />
             </Field>
-            <Button type="submit" variant="primary" size="lg" className="mt-4 w-full">Sign in <ArrowRight className="h-4 w-4" /></Button>
+            {sent && (
+              <Field label="6-digit code" htmlFor="tl-c" className="mt-4">
+                <input id="tl-c" className="field h-12 text-[17px] tabular" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => { setCode(e.target.value.replace(/\D/g, '')); setError('') }} />
+              </Field>
+            )}
+            <Button type="submit" variant="primary" size="lg" className="mt-4 w-full" disabled={busy}>{LIVE && !sent ? 'Send code' : 'Sign in'} <ArrowRight className="h-4 w-4" /></Button>
           </form>
-          <p className="mt-5 text-xs leading-relaxed text-white/45">
+          {!LIVE && <p className="mt-5 text-xs leading-relaxed text-white/45">
             Demo numbers: coordinator {formatPhone(DEMO.coordinator)} (Sections 40–43), leader {formatPhone(DEMO.leader)} (Nave B).
-          </p>
+          </p>}
         </main>
       </div>
     </div>

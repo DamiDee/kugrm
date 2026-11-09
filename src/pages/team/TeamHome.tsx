@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { CalendarX2, ChevronDown, LogOut, Phone, Users } from 'lucide-react'
 import { useStore } from '@/store/useStore'
+import { LIVE, tokens } from '@/lib/api'
+import { loadTeam } from '@/lib/live'
 import { positionsOf, sessionsOf, spotOccupants, teamScope, uncoveredSpots, useEventData, useMemberMap, type EventData } from '@/lib/selectors'
 import type { Member } from '@/data/types'
 import { cn, formatDate, formatPhone, formatTime, fullName, sessionLine, telHref } from '@/lib/utils'
@@ -26,12 +28,18 @@ export default function TeamHome() {
   const navigate = useNavigate()
   const me = members.find((m) => m.id === teamUser?.memberId)
   const active = events.find((e) => e.id === activeEventId) ?? events[0]
-  const sessions = useMemo(() => sessionsOf(events, active), [events, active])
-  const [eventId, setEventId] = useState(activeEventId)
+  const sessions = useMemo(() => (active ? sessionsOf(events, active) : []), [events, active])
+  const [picked, setEventId] = useState('')
+  const eventId = picked || activeEventId
+  const [loadFailed, setLoadFailed] = useState(false)
+  useEffect(() => {
+    if (LIVE && tokens.get('team')) loadTeam(picked || undefined).catch(() => setLoadFailed(true))
+  }, [picked])
   const data = useEventData(eventId)
   const memberMap = useMemberMap()
   const scope = useMemo(() => (me ? teamScope(me, members) : { coordinators: [], zoneNames: new Set<string>() }), [me, members])
 
+  if (LIVE && tokens.get('team') && !me && !loadFailed) return <div role="status" className="grid min-h-[100dvh] place-items-center bg-canvas text-sm text-ink-500">Loading your team…</div>
   if (!me || (me.role !== 'coordinator' && me.role !== 'leader')) return <Navigate to="/team/login" replace />
   const event = data.event
   const leader = me.role === 'coordinator' && me.leaderId ? memberMap.get(me.leaderId) : undefined

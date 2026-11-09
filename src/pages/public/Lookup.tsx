@@ -2,6 +2,7 @@ import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { ArrowUpRight, Clock3, MapPin, ShieldCheck, Sun, Sunset } from 'lucide-react'
 import { useStore } from '@/store/useStore'
+import { LIVE } from '@/lib/api'
 import { sessionsOf, useEventData } from '@/lib/selectors'
 import { formatDate, formatTime } from '@/lib/utils'
 import { PublicFooter, PublicNav } from '@/components/public/PublicShell'
@@ -34,6 +35,8 @@ export default function Lookup() {
   const { event, stats } = useEventData(activeEventId)
   const sessions = event ? sessionsOf(events, event) : []
   const published = event?.rosterStatus === 'published'
+  const publicAssigned = useStore((s) => s.publicAssigned)
+  const serving = LIVE ? publicAssigned ?? 0 : stats.assigned
   const range = sessions.length ? dateRange(sessions) : undefined
   const morning = sessions.find((e) => e.session === 'morning')
   const evening = sessions.find((e) => e.session === 'evening')
@@ -137,7 +140,7 @@ export default function Lookup() {
                 </div>
                 <div className="flex items-center justify-between gap-4 rounded-[26px] bg-tga-cream p-5 text-tga-black">
                   <div>
-                    <div className="text-[34px] font-semibold leading-none tracking-[-0.03em] tabular">{published ? stats.assigned.toLocaleString() : '—'}</div>
+                    <div className="text-[34px] font-semibold leading-none tracking-[-0.03em] tabular">{published ? serving.toLocaleString() : '—'}</div>
                     <div className="mt-1.5 text-xs text-tga-black/60">{published ? `Ushers serving ${event.series ? 'Day ' + event.day + (event.session ? `, ${event.session}` : '') : event.code}` : 'Roster not yet published'}</div>
                   </div>
                   <div className="text-right text-xs text-tga-black/60">

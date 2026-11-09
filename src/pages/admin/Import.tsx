@@ -4,6 +4,8 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { AlertCircle, AlertTriangle, ArrowLeft, Check, CheckCircle2, Download, FileSpreadsheet, UploadCloud } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useStore, type ImportRow } from '@/store/useStore'
+import { LIVE } from '@/lib/api'
+import { importFileLive } from '@/lib/live'
 import { useEventData } from '@/lib/selectors'
 import { cn, downloadFile, formatPhone, isValidNigerianPhone, normalizePhone } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
@@ -74,6 +76,18 @@ export default function Import() {
   const [done, setDone] = useState<{ members: number; assignments: number } | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  const sourceFile = useRef<File | null>(null)
+  const finish = async () => {
+    try {
+      const r = LIVE && sourceFile.current ? await importFileLive(sourceFile.current, eventId) : importRows(valid, eventId)
+      setDone(r)
+      setStage(3)
+      toast.success(`${r.members} members imported.`)
+    } catch (err) {
+      toast.error('Import failed.', (err as Error).message)
+    }
+  }
+
   const load = async (file: File) => {
     try {
       let rows: string[][]
@@ -88,6 +102,7 @@ export default function Import() {
       if (rows.length < 2) return toast.error('The file looks empty', 'It needs a header row and at least one member.')
       setFileName(file.name)
       setRaw(rows)
+      sourceFile.current = file
       setStage(1)
     } catch {
       toast.error('Unable to read that file.', 'Check it isn’t password protected and try again.')
@@ -222,7 +237,7 @@ export default function Import() {
             <div className="flex justify-between">
               <Button variant="ghost" onClick={() => (stage === 1 ? reset() : setStage(1))}><ArrowLeft className="h-4 w-4" /> Back</Button>
               {stage === 1 ? <Button variant="primary" onClick={() => setStage(2)}>Validate {parsed.length} rows</Button> : (
-                <Button variant="primary" disabled={!valid.length} onClick={() => { const r = importRows(valid, eventId); setDone(r); setStage(3); toast.success(`${r.members} members imported.`) }}>Import {valid.length} members</Button>
+                <Button variant="primary" disabled={!valid.length} onClick={finish}>Import {valid.length} members</Button>
               )}
             </div>
           </motion.div>

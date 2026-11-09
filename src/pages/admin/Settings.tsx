@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { useStore } from '@/store/useStore'
+import { LIVE } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
 import { Field, PageHeader, Switch } from '@/components/ui/misc'
 import { ConfirmDialog } from '@/components/ui/Modal'
@@ -38,11 +39,11 @@ export default function Settings() {
           <Button className="mt-4" variant="primary" onClick={() => { if (!isValidNigerianPhone(phone)) return toast.error('Unable to save changes.', 'Enter a valid Nigerian phone number.'); update({ contactName: name, contactPhone: normalizePhone(phone) }); toast.success('Settings saved.') }}>Save contact</Button>
         </div>
       </div>
-      <div className="mt-8 rounded-2xl border border-dashed border-line-strong p-5">
+      {!LIVE && <div className="mt-8 rounded-2xl border border-dashed border-line-strong p-5">
         <h3 className="text-sm font-semibold text-ink-900">Demo data</h3>
         <p className="mt-0.5 text-sm text-ink-500">Data is stored in this browser until a backend is connected. Restore the original sample roster at any time.</p>
         <Button className="mt-4" variant="secondary" onClick={() => setConfirm(true)}><RotateCcw className="h-4 w-4" /> Reset demo data</Button>
-      </div>
+      </div>}
       <ConfirmDialog open={confirm} onClose={() => setConfirm(false)} title="Reset demo data?" description="All members, events and assignments return to the original sample. Your changes will be lost." confirmLabel="Reset data" onConfirm={() => { reset(); toast.success('Demo data restored.') }} />
     </div>
   )

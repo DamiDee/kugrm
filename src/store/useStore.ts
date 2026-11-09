@@ -3,6 +3,7 @@ import { persist, createJSONStorage, type StateStorage } from 'zustand/middlewar
 import type { Activity, AppNotification, Assignment, Member, MemberRole, MinistryEvent, Position, Zone, ZoneKind } from '@/data/types'
 import { createSeed } from '@/data/mock'
 import { eventLabel, normalizePhone, uid } from '@/lib/utils'
+import { LIVE } from '@/lib/api'
 
 const safeStorage: StateStorage = {
   getItem: (k) => { try { return localStorage.getItem(k) } catch { return null } },
@@ -41,6 +42,10 @@ interface State {
   admin: { name: string; email: string } | null
   /** a coordinator or leader signed in to their team view */
   teamUser: { memberId: string } | null
+  /** live mode: the admin's data has finished its first load */
+  liveReady: boolean
+  /** live mode: "ushers serving" on the landing page */
+  publicAssigned?: number
   settings: { contactPhone: string; contactName: string; showTeammatePhones: boolean; allowSelfConfirm: boolean }
 
   login: (email: string, remember: boolean) => void
@@ -89,11 +94,15 @@ interface State {
 }
 
 const seed = () => {
-  const s = createSeed()
+  // with a backend connected the store starts empty and is filled from the API
+  const s = LIVE
+    ? { members: [], events: [], zones: [], positions: [], assignments: [], activity: [], notifications: [], activeEventId: '' }
+    : createSeed()
   return {
     ...s,
     admin: null,
     teamUser: null,
+    liveReady: false,
     settings: { contactPhone: '08020009988', contactName: 'Department Secretariat', showTeammatePhones: true, allowSelfConfirm: true },
   }
 }
@@ -343,6 +352,8 @@ export const useStore = create<State>()(
       updateSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
       resetDemo: () => set({ ...seed(), admin: get().admin, teamUser: null }),
     }),
-    { name: 'grm-store-v4', storage: createJSONStorage(() => safeStorage), version: 1 },
+    LIVE
+      ? { name: 'grm-live-v1', storage: createJSONStorage(() => safeStorage), version: 1, partialize: (s) => ({ admin: s.admin, teamUser: s.teamUser }) as unknown as State }
+      : { name: 'grm-store-v4', storage: createJSONStorage(() => safeStorage), version: 1 },
   ),
 )

@@ -3,6 +3,7 @@ import { useStore } from '@/store/useStore'
 import { computeEventData } from './selectors'
 import { downloadFile, formatPhone, fullName, toCSV } from './utils'
 import { toast } from '@/components/ui/Toast'
+import { LIVE, apiFile, ApiError } from './api'
 
 export type ExportKind = 'full' | 'aisle' | 'unassigned' | 'event' | 'contacts'
 export type ExportFormat = 'csv' | 'excel' | 'pdf'
@@ -29,6 +30,18 @@ export function buildRows(kind: ExportKind, eventId: string, zoneId?: string) {
 }
 
 export async function exportRoster(kind: ExportKind, format: ExportFormat, eventId: string, zoneId?: string) {
+  if (LIVE) {
+    try {
+      const fmt = format === 'excel' ? 'xlsx' : format
+      const { blob, name } = await apiFile(`/events/${eventId}/exports/${kind}`, { as: 'admin', query: { format: fmt, zoneId: kind === 'aisle' ? zoneId : undefined } })
+      downloadFile(name ?? `roster-${kind}.${fmt}`, blob)
+      toast.success('Export ready.')
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) toast.info('Nothing to export', 'There are no rows for this session yet.')
+      else toast.error('Export failed.', (e as Error).message)
+    }
+    return
+  }
   const s = useStore.getState()
   const ev = s.events.find((e) => e.id === eventId)
   const zone = zoneId ? s.zones.find((z) => z.id === zoneId) : undefined

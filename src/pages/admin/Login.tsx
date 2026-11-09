@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Eye, EyeOff, Lock } from 'lucide-react'
 import { useStore } from '@/store/useStore'
+import { LIVE } from '@/lib/api'
+import { adminLogin } from '@/lib/live'
 import { Button } from '@/components/ui/Button'
 import { Field, Logo } from '@/components/ui/misc'
 import { toast } from '@/components/ui/Toast'
@@ -12,7 +14,7 @@ export default function AdminLogin() {
   const login = useStore((s) => s.login)
   const navigate = useNavigate()
   const loc = useLocation() as { state?: { from?: string } }
-  const [email, setEmail] = useState('admin@koinonia.org')
+  const [email, setEmail] = useState(LIVE ? '' : 'admin@koinonia.org')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(true)
   const [show, setShow] = useState(false)
@@ -23,10 +25,16 @@ export default function AdminLogin() {
     e?.preventDefault()
     const errs: typeof errors = {}
     if (!/^\S+@\S+\.\S+$/.test(email)) errs.email = 'Enter a valid email address.'
-    if (password.length < 4) errs.password = 'Enter your password (any 4+ characters in this demo).'
+    if (LIVE ? !password : password.length < 4) errs.password = LIVE ? 'Enter your password.' : 'Enter your password (any 4+ characters in this demo).'
     setErrors(errs)
     if (Object.keys(errs).length) return
     setLoading(true)
+    if (LIVE) {
+      adminLogin(email, password, remember)
+        .then(() => navigate(loc.state?.from ?? '/admin', { replace: true }))
+        .catch((err: Error) => { setErrors({ password: err.message }); setLoading(false) })
+      return
+    }
     setTimeout(() => {
       login(email, remember)
       navigate(loc.state?.from ?? '/admin', { replace: true })
@@ -78,7 +86,7 @@ export default function AdminLogin() {
             </div>
             <Button variant="primary" size="lg" loading={loading} className="mt-2 w-full" onClick={submit}>Sign in</Button>
           </form>
-          <p className="mt-6 rounded-lg bg-ink-900/[.04] px-3 py-2.5 text-xs text-ink-500">Demo: any email and a password of 4+ characters will sign you in.</p>
+          {!LIVE && <p className="mt-6 rounded-lg bg-ink-900/[.04] px-3 py-2.5 text-xs text-ink-500">Demo: any email and a password of 4+ characters will sign you in.</p>}
         </motion.div>
       </main>
     </div>
