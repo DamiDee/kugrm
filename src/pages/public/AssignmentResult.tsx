@@ -4,11 +4,10 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowLeft, CalendarClock, CalendarX2, ChevronDown, History, Hourglass, Mail, Phone, PhoneOff, RotateCcw, Search, Undo2, UserCheck } from 'lucide-react'
 import { useStore } from '@/store/useStore'
 import { LIVE, type ApiError } from '@/lib/api'
-import { availableLive, confirmLive, lookupLive, unavailableLive, useLiveMap } from '@/lib/live'
+import { availableLive, confirmLive, lookupLive, useLiveMap } from '@/lib/live'
 import { lookupByPhone, positionsOf, spotOccupants, useEventData, useMemberMap, type AssignmentView, type LookupResult, type SessionEntry } from '@/lib/selectors'
 import { cn, eventLabel, formatDate, formatPhone, formatShortDate, formatTime, fullName, sessionLine, sessionShort, telHref, SESSION_LABEL } from '@/lib/utils'
-import { Field, Logo, Segmented } from '@/components/ui/misc'
-import { Modal } from '@/components/ui/Modal'
+import { Logo, Segmented } from '@/components/ui/misc'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { toast } from '@/components/ui/Toast'
@@ -195,7 +194,6 @@ function Found({ view }: { view: AssignmentView }) {
   const settings = useStore((s) => s.settings)
   const confirmAssignment = useStore((s) => s.confirmAssignment)
   const [showAll, setShowAll] = useState(false)
-  const [away, setAway] = useState(false)
   const data = useEventData(current.event.id)
   const memberMap = useMemberMap()
   const live = useContext(LiveCtx)
@@ -232,12 +230,6 @@ function Found({ view }: { view: AssignmentView }) {
         view={current}
         onConfirm={settings.allowSelfConfirm ? () => void confirm() : undefined}
       />
-      <div className="-mt-4 flex flex-col items-start justify-between gap-3 rounded-2xl border border-line bg-white px-5 py-4 sm:flex-row sm:items-center">
-        <p className="text-sm text-ink-600">Can’t make {sessionShort(current.event)}? Tell us, and your {current.position.spot ? 'seat' : 'place'} will be given to someone else for this session.</p>
-        <Button variant="secondary" size="sm" onClick={() => setAway(true)}><CalendarX2 className="h-4 w-4" /> I can’t make it</Button>
-      </div>
-      <AwayDialog open={away} onClose={() => setAway(false)} view={current} />
-
       <motion.section {...fade} transition={{ ...fade.transition, delay: 0.15 }} aria-labelledby="map-h">
         <div className="mb-3 flex items-end justify-between">
           <div>
@@ -245,7 +237,7 @@ function Found({ view }: { view: AssignmentView }) {
             <p className="text-sm text-ink-500">{current.position.spot ? 'Your usher seat is marked on the floor plan.' : `${current.zone.name} is highlighted on the floor plan.`}</p>
           </div>
         </div>
-        <VenueMap zones={eventZones} mode="locate" highlightZoneId={current.zone.id} highlightPositionId={current.position.id} positions={mapPositions} occupants={occupants} pinLabel={current.position.spot ? 'You stand here' : `You · ${current.position.name}`} />
+        <VenueMap zones={eventZones} mode="locate" highlightZoneId={current.zone.id} highlightPositionId={current.position.id} positions={mapPositions} occupants={occupants} hideLegend pinLabel={current.position.spot ? 'You stand here' : `You · ${current.position.name}`} />
       </motion.section>
 
       {current.event.instructions && (
@@ -289,52 +281,7 @@ function Found({ view }: { view: AssignmentView }) {
         </div>
       </motion.section>
 
-      <motion.section {...fade} transition={{ ...fade.transition, delay: 0.3 }} aria-labelledby="info-h" className="grid gap-6 sm:grid-cols-[1fr_1.2fr]">
-        <div>
-          <h2 id="info-h" className="text-[17px] font-semibold tracking-tight text-ink-900">Session information</h2>
-          <p className="mt-1 text-sm text-ink-500">{current.event.description}</p>
-        </div>
-        <EventInfo event={current.event} />
-      </motion.section>
     </div>
-  )
-}
-
-function AwayDialog({ open, onClose, view }: { open: boolean; onClose: () => void; view: AssignmentView }) {
-  const markUnavailable = useStore((s) => s.markUnavailable)
-  const [reason, setReason] = useState('')
-  const live = useContext(LiveCtx)
-  const submit = async () => {
-    if (LIVE) {
-      try {
-        await unavailableLive(view.assignment.id, live.phone, reason)
-        await live.reload()
-      } catch (e) {
-        return toast.error('That wasn’t saved.', (e as Error).message)
-      }
-    } else markUnavailable(view.assignment.id, reason)
-    toast.success('Thanks for letting us know', `Your ${view.position.spot ? 'seat' : 'place'} for ${sessionShort(view.event)} is now open for someone else.`)
-    setReason('')
-    onClose()
-  }
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      size="sm"
-      title={`Can’t make ${sessionShort(view.event)}?`}
-      description={`Your ${view.position.spot ? 'seat' : 'place'} at ${view.zone.name} (${view.position.name}) will be left open for this session only, so your coordinator can give it to someone else. Your other sessions don’t change.`}
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>Keep my place</Button>
-          <Button variant="danger" onClick={() => void submit()}>I can’t make it</Button>
-        </>
-      }
-    >
-      <Field label="Reason (optional)" htmlFor="away-r" hint="Only your coordinators and the admins see this.">
-        <input id="away-r" className="field" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Work shift, travelling" maxLength={120} />
-      </Field>
-    </Modal>
   )
 }
 

@@ -40,6 +40,8 @@ interface Props {
   onSelect?: (zoneId: string) => void
   className?: string
   compact?: boolean
+  /** leave out the colour key under the plan */
+  hideLegend?: boolean
   pinLabel?: string
   /** positions of these zones; positions with a `spot` are drawn as usher spots */
   positions?: Position[]
@@ -209,7 +211,7 @@ function usePanZoom(box: React.RefObject<HTMLDivElement | null>) {
 
 /* ---------- component ---------- */
 
-export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneId, info = {}, onSelect, className, compact, pinLabel = 'You', positions, occupants, highlightPositionId, onSelectSpot, uncovered }: Props) {
+export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneId, info = {}, onSelect, className, compact, hideLegend, pinLabel = 'You', positions, occupants, highlightPositionId, onSelectSpot, uncovered }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
   const [manualOrient, setManualOrient] = useState<Orient | null>(null)
@@ -743,7 +745,7 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
           ))}
         </div>
       )}
-      {!compact && (
+      {!compact && !hideLegend && (
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-ink-500">
           {[
             ['#2F5DD3', 'Seating, 11 rows of 12'],
