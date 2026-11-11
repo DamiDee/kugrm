@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
-import type { Activity, AppNotification, Assignment, Member, MemberRole, MinistryEvent, Position, Zone, ZoneKind } from '@/data/types'
+import type { Activity, AdminRole, AppNotification, Assignment, Member, MemberRole, MinistryEvent, Position, Zone, ZoneKind } from '@/data/types'
 import { createSeed } from '@/data/mock'
 import { eventLabel, normalizePhone, uid } from '@/lib/utils'
 import { LIVE } from '@/lib/api'
@@ -39,9 +39,11 @@ interface State {
   activity: Activity[]
   notifications: AppNotification[]
   activeEventId: string
-  admin: { name: string; email: string } | null
+  admin: { id?: string; name: string; email: string; role?: AdminRole } | null
   /** a coordinator or leader signed in to their team view */
   teamUser: { memberId: string } | null
+  /** live mode: signed in to the team page, but the server has no current session */
+  teamNoSession?: boolean
   /** live mode: the admin's data has finished its first load */
   liveReady: boolean
   /** live mode: "ushers serving" on the landing page */
@@ -52,7 +54,7 @@ interface State {
   logout: () => void
   teamLogin: (phone: string) => 'ok' | 'not-found' | 'not-team'
   teamLogout: () => void
-  setTeamRole: (memberId: string, role: MemberRole, opts?: { leaderId?: string; coordinates?: string[] }) => void
+  setTeamRole: (memberId: string, role: MemberRole, opts?: { leaderId?: string; leaderIds?: string[]; coordinates?: string[] }) => void
   setActiveEvent: (id: string) => void
   log: (text: string, kind: Activity['kind']) => void
   notify: (n: Omit<AppNotification, 'id' | 'at' | 'read'>) => void
@@ -115,14 +117,14 @@ export const useStore = create<State>()(
       login: (email) => {
         const local = email.split('@')[0] || 'admin'
         const name = local.charAt(0).toUpperCase() + local.slice(1).replace(/[._-].*/, '')
-        set({ admin: { name, email } })
+        set({ admin: { name, email, role: 'admin' } })
       },
       logout: () => set({ admin: null }),
       teamLogin: (phone) => {
         const p = normalizePhone(phone)
         const m = get().members.find((x) => x.phone === p)
         if (!m) return 'not-found'
-        if (m.role !== 'coordinator' && m.role !== 'leader') return 'not-team'
+        if (m.status === 'inactive' || (m.role !== 'coordinator' && m.role !== 'leader')) return 'not-team'
         set({ teamUser: { memberId: m.id } })
         return 'ok'
       },
@@ -131,12 +133,16 @@ export const useStore = create<State>()(
         set((s) => ({
           members: s.members.map((m) => {
             if (m.id === memberId) {
-              if (role === 'usher') return { ...m, role: undefined, leaderId: undefined, coordinates: undefined }
-              if (role === 'leader') return { ...m, role, leaderId: undefined, coordinates: undefined }
-              return { ...m, role, leaderId: opts.leaderId, coordinates: opts.coordinates ?? m.coordinates ?? [] }
+              if (role === 'usher') return { ...m, role: undefined, leaderId: undefined, leaderIds: undefined, coordinates: undefined }
+              if (role === 'leader') return { ...m, role, leaderId: undefined, leaderIds: undefined, coordinates: undefined }
+              const leaderIds = opts.leaderIds ?? (opts.leaderId ? [opts.leaderId] : [])
+              return { ...m, role, leaderId: leaderIds[0], leaderIds, coordinates: opts.coordinates ?? m.coordinates ?? [] }
             }
-            // a leader who steps down leaves their coordinators without a leader
-            if (role !== 'leader' && m.leaderId === memberId) return { ...m, leaderId: undefined }
+            // a leader who steps down is removed from their coordinators' leader links
+            if (role !== 'leader' && (m.leaderId === memberId || m.leaderIds?.includes(memberId))) {
+              const nextIds = (m.leaderIds ?? (m.leaderId ? [m.leaderId] : [])).filter((id) => id !== memberId)
+              return { ...m, leaderId: nextIds[0], leaderIds: nextIds.length ? nextIds : undefined }
+            }
             return m
           }),
         }))
@@ -353,7 +359,7 @@ export const useStore = create<State>()(
       resetDemo: () => set({ ...seed(), admin: get().admin, teamUser: null }),
     }),
     LIVE
-      ? { name: 'grm-live-v1', storage: createJSONStorage(() => safeStorage), version: 1, partialize: (s) => ({ admin: s.admin, teamUser: s.teamUser }) as unknown as State }
+      ? { name: 'grm-live-v1', storage: createJSONStorage(() => safeStorage), version: 1, partialize: (s) => ({ admin: s.admin }) as unknown as State }
       : { name: 'grm-store-v4', storage: createJSONStorage(() => safeStorage), version: 1 },
   ),
 )

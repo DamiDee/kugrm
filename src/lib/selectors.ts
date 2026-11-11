@@ -220,9 +220,15 @@ export function absenceList(data: EventData, members: Map<string, Member>) {
     .sort((a, b) => Number(a.covered) - Number(b.covered) || a.zone.order - b.zone.order)
 }
 
+/** Returns all leader IDs a coordinator reports to (`leaderIds` or single `leaderId`). */
+export function leaderIdsOf(m: Member): string[] {
+  if (m.leaderIds?.length) return m.leaderIds
+  return m.leaderId ? [m.leaderId] : []
+}
+
 /** What a coordinator or leader can see: the zones they oversee and, for a leader, their coordinators. */
 export function teamScope(me: Member, members: Member[]) {
-  const coordinators = me.role === 'leader' ? members.filter((m) => m.role === 'coordinator' && m.leaderId === me.id) : me.role === 'coordinator' ? [me] : []
+  const coordinators = me.role === 'leader' ? members.filter((m) => m.role === 'coordinator' && leaderIdsOf(m).includes(me.id)) : me.role === 'coordinator' ? [me] : []
   const zoneNames = new Set(coordinators.flatMap((c) => c.coordinates ?? []))
   return { coordinators, zoneNames }
 }

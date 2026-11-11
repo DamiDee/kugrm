@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CalendarX2, Crown, Pencil, Phone, Plus, ShieldCheck, Trash2, UserPlus } from 'lucide-react'
+import { CalendarX2, Check, Copy, Crown, KeyRound, Pencil, Phone, Plus, RefreshCw, ShieldCheck, Trash2, UserPlus } from 'lucide-react'
 import { useStore } from '@/store/useStore'
-import { useEventData, useMemberMap, type EventData } from '@/lib/selectors'
+import { leaderIdsOf, useEventData, useMemberMap, type EventData } from '@/lib/selectors'
+import { LIVE, type ApiError } from '@/lib/api'
+import { getFallbackKey, rotateFallbackKey } from '@/lib/live'
+import type { FallbackKeyResponse } from '@/data/types'
 import type { Member, ZoneKind } from '@/data/types'
 import { cn, formatPhone, fullName, telHref } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { Avatar } from '@/components/ui/Avatar'
-import { EmptyState, Field, PageHeader, Select } from '@/components/ui/misc'
+import { EmptyState, Field, PageHeader } from '@/components/ui/misc'
 import { ConfirmDialog, Modal } from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
 import { MemberPicker } from '@/components/admin/MemberPicker'
@@ -29,12 +32,15 @@ export default function Team() {
   const [edit, setEdit] = useState<{ open: boolean; member?: Member; leaderId?: string }>({ open: false })
   const [addLeader, setAddLeader] = useState(false)
   const [remove, setRemove] = useState<Member | null>(null)
+  const [keyFor, setKeyFor] = useState<Member | null>(null)
+  // offline keys: owner and admin only, and only with the backend connected
+  const canKeys = useStore((s) => LIVE && s.admin?.role !== 'editor')
 
   const covered = new Set(coordinators.flatMap((c) => c.coordinates ?? []))
   const uncovered = data.zones.filter((z) => !covered.has(z.name))
   const groups: { leader?: Member; list: Member[] }[] = [
-    ...leaders.map((l) => ({ leader: l, list: coordinators.filter((c) => c.leaderId === l.id) })),
-    { leader: undefined, list: coordinators.filter((c) => !c.leaderId || !memberMap.get(c.leaderId)) },
+    ...leaders.map((l) => ({ leader: l, list: coordinators.filter((c) => leaderIdsOf(c).includes(l.id)) })),
+    { leader: undefined, list: coordinators.filter((c) => !leaderIdsOf(c).some((id) => memberMap.get(id)?.role === 'leader')) },
   ].filter((g) => g.leader || g.list.length)
 
   return (
@@ -71,6 +77,7 @@ export default function Team() {
                 {g.leader && (
                   <div className="flex gap-1">
                     <Button size="sm" variant="secondary" onClick={() => setEdit({ open: true, leaderId: g.leader!.id })}><UserPlus className="h-3.5 w-3.5" /> Coordinator</Button>
+                    {canKeys && <Button size="icon-sm" variant="ghost" onClick={() => setKeyFor(g.leader!)} aria-label={`Offline key for ${fullName(g.leader)}`} title="Offline key"><KeyRound className="h-3.5 w-3.5" /></Button>}
                     <Button size="icon-sm" variant="ghost" className="hover:text-bad-500" onClick={() => setRemove(g.leader!)} aria-label={`Remove ${fullName(g.leader)} as leader`}><Trash2 className="h-3.5 w-3.5" /></Button>
                   </div>
                 )}
@@ -79,7 +86,7 @@ export default function Team() {
                 <p className="px-4 py-4 text-sm text-ink-500">No coordinators yet.</p>
               ) : (
                 <ul className="divide-y divide-line">
-                  {g.list.map((c) => <CoordinatorLine key={c.id} c={c} data={data} onEdit={() => setEdit({ open: true, member: c })} onRemove={() => setRemove(c)} />)}
+                  {g.list.map((c) => <CoordinatorLine key={c.id} c={c} data={data} onEdit={() => setEdit({ open: true, member: c })} onRemove={() => setRemove(c)} onKey={canKeys ? () => setKeyFor(c) : undefined} />)}
                 </ul>
               )}
             </section>
@@ -88,6 +95,7 @@ export default function Team() {
       )}
 
       <CoordinatorDialog open={edit.open} onClose={() => setEdit({ open: false })} member={edit.member} leaderId={edit.leaderId} data={data} />
+      <KeyDialog member={keyFor} onClose={() => setKeyFor(null)} />
       <LeaderDialog open={addLeader} onClose={() => setAddLeader(false)} data={data} />
       <ConfirmDialog
         open={!!remove}
@@ -101,7 +109,7 @@ export default function Team() {
   )
 }
 
-function CoordinatorLine({ c, data, onEdit, onRemove }: { c: Member; data: EventData; onEdit: () => void; onRemove: () => void }) {
+function CoordinatorLine({ c, data, onEdit, onRemove, onKey }: { c: Member; data: EventData; onEdit: () => void; onRemove: () => void; onKey?: () => void }) {
   const names = new Set(c.coordinates ?? [])
   const zs = data.zoneStats.filter((z) => names.has(z.zone.name))
   const assigned = zs.reduce((n, z) => n + z.assigned, 0)
@@ -120,6 +128,7 @@ function CoordinatorLine({ c, data, onEdit, onRemove }: { c: Member; data: Event
         {away > 0 ? <div className="inline-flex items-center gap-1 text-bad-600"><CalendarX2 className="h-3 w-3" />{away} away</div> : <div className="text-ink-400">this session</div>}
       </div>
       <a href={telHref(c.phone)} className="hidden h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] text-ink-700 ring-1 ring-line md:inline-flex"><Phone className="h-3.5 w-3.5 text-wine-500" />{formatPhone(c.phone)}</a>
+      {onKey && <Button size="icon-sm" variant="ghost" onClick={onKey} aria-label={`Offline key for ${fullName(c)}`} title="Offline key"><KeyRound className="h-3.5 w-3.5" /></Button>}
       <Button size="icon-sm" variant="ghost" onClick={onEdit} aria-label={`Edit ${fullName(c)}`}><Pencil className="h-3.5 w-3.5" /></Button>
       <Button size="icon-sm" variant="ghost" className="hover:text-bad-500" onClick={onRemove} aria-label={`Remove ${fullName(c)}`}><Trash2 className="h-3.5 w-3.5" /></Button>
     </li>
@@ -148,12 +157,13 @@ function CoordinatorDialog({ open, onClose, member, leaderId: leaderProp, data }
   const members = useStore((s) => s.members)
   const leaders = members.filter((m) => m.role === 'leader')
   const [id, setId] = useState('')
-  const [leaderId, setLeaderId] = useState('')
+  const [leaderIds, setLeaderIds] = useState<Set<string>>(new Set())
   const [zones, setZones] = useState<Set<string>>(new Set())
   useEffect(() => {
     if (!open) return
     setId(member?.id ?? '')
-    setLeaderId(member?.leaderId ?? leaderProp ?? leaders[0]?.id ?? '')
+    const start = member ? leaderIdsOf(member) : leaderProp ? [leaderProp] : leaders[0] ? [leaders[0].id] : []
+    setLeaderIds(new Set(start))
     setZones(new Set(member?.coordinates ?? []))
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
   const owner = useMemo(() => {
@@ -165,7 +175,8 @@ function CoordinatorDialog({ open, onClose, member, leaderId: leaderProp, data }
   const toggle = (name: string) => setZones((s) => { const n = new Set(s); if (n.has(name)) n.delete(name); else n.add(name); return n })
   const m = members.find((x) => x.id === id)
   const save = () => {
-    setTeamRole(id, 'coordinator', { leaderId: leaderId || undefined, coordinates: [...zones] })
+    // the server replaces all links, so send the complete list
+    setTeamRole(id, 'coordinator', { leaderIds: [...leaderIds], coordinates: [...zones] })
     toast.success(member ? 'Coordinator updated.' : `${m ? fullName(m) : 'Member'} is now a coordinator.`, zoneSummary([...zones]))
     onClose()
   }
@@ -175,9 +186,22 @@ function CoordinatorDialog({ open, onClose, member, leaderId: leaderProp, data }
       <div className="space-y-4 pb-2">
         <div className="grid gap-4 sm:grid-cols-2">
           {!member && <Field label="Member"><MemberPicker value={id} onChange={setId} data={data} /></Field>}
-          <Field label="Reports to" htmlFor="cd-l">
-            <Select id="cd-l" value={leaderId} onChange={setLeaderId}><option value="">No leader</option>{leaders.map((l) => <option key={l.id} value={l.id}>{fullName(l)}</option>)}</Select>
-          </Field>
+          <fieldset>
+            <legend className="label">Reports to</legend>
+            {leaders.length === 0 ? <p className="text-sm text-ink-500">No leaders yet.</p> : (
+              <div className="flex flex-wrap gap-1.5">
+                {leaders.map((l) => {
+                  const on = leaderIds.has(l.id)
+                  return (
+                    <button key={l.id} type="button" aria-pressed={on} onClick={() => setLeaderIds((s) => { const n = new Set(s); if (on) n.delete(l.id); else n.add(l.id); return n })}
+                      className={cn('min-h-[34px] rounded-lg px-2.5 text-[13px] ring-1 transition-colors', on ? 'bg-ink-900 text-white ring-ink-900' : 'bg-white text-ink-800 ring-line hover:ring-line-strong')}>
+                      {fullName(l)}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </fieldset>
         </div>
         {byKind.map(({ k, list }) => (
           <fieldset key={k}>
@@ -201,6 +225,82 @@ function CoordinatorDialog({ open, onClose, member, leaderId: leaderProp, data }
           </fieldset>
         ))}
         <p className="text-xs text-ink-500">Greyed zones already have a coordinator. Picking one here gives it to both; you can clear it from the other person.</p>
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * View or rotate a coordinator's or leader's offline key. Nothing is fetched
+ * until the admin asks, and the key is cleared as soon as the dialog closes.
+ */
+function KeyDialog({ member, onClose }: { member: Member | null; onClose: () => void }) {
+  const [shown, setShown] = useState<FallbackKeyResponse | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [confirmRotate, setConfirmRotate] = useState(false)
+  const [error, setError] = useState('')
+  const [copied, setCopied] = useState(false)
+  useEffect(() => { setShown(null); setBusy(false); setConfirmRotate(false); setError(''); setCopied(false) }, [member])
+
+  const explain = (e: ApiError) =>
+    e.code === 'NOT_TEAM' ? 'This member is an usher. Give them a team role first.'
+      : e.status === 403 ? 'Your account can’t manage offline keys. Ask an owner or admin.'
+        : e.code === 'FALLBACK_KEY_ERROR' ? 'The server couldn’t read this key. Rotate it to issue a new one, or ask the backend developer.'
+          : e.message
+  const view = async () => {
+    if (!member || busy) return
+    setBusy(true); setError('')
+    try { setShown(await getFallbackKey(member.id)) } catch (e) { setError(explain(e as ApiError)) } finally { setBusy(false) }
+  }
+  const rotate = async () => {
+    if (!member || busy) return
+    setBusy(true); setError(''); setConfirmRotate(false)
+    try {
+      setShown(await rotateFallbackKey(member.id))
+      toast.success('New key issued.', 'The old key and their open sessions no longer work.')
+    } catch (e) {
+      // never retry a rotation: the next step is to view the current key
+      setError(`${explain(e as ApiError)} If you’re not sure whether it changed, use View key rather than rotating again.`)
+    } finally { setBusy(false) }
+  }
+  const copy = async () => {
+    if (!shown) return
+    try { await navigator.clipboard.writeText(shown.key); setCopied(true) } catch { setError('Couldn’t copy. Select the key and copy it by hand.') }
+  }
+
+  return (
+    <Modal
+      open={!!member}
+      onClose={onClose}
+      size="sm"
+      title={member ? `Offline key for ${fullName(member)}` : ''}
+      description="They sign in on the team page with their phone number and this 6-character key. Share it with them in person or by phone."
+      footer={<Button variant="secondary" onClick={onClose}>Close</Button>}
+    >
+      <div className="space-y-4 pb-2">
+        {shown ? (
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-paper px-4 py-3 ring-1 ring-line">
+            <div>
+              <div className="select-all font-mono text-[26px] font-semibold tracking-[0.3em] text-ink-900">{shown.key}</div>
+              <div className="text-xs text-ink-500">Issued {new Date(shown.rotatedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</div>
+            </div>
+            <Button size="sm" variant="secondary" onClick={() => void copy()}>{copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} {copied ? 'Copied' : 'Copy'}</Button>
+          </div>
+        ) : (
+          <Button variant="primary" disabled={busy} onClick={() => void view()}><KeyRound className="h-4 w-4" /> {busy ? 'Loading…' : 'View key'}</Button>
+        )}
+        {confirmRotate ? (
+          <div className="rounded-xl bg-warn-50 px-4 py-3 text-sm text-warn-600 ring-1 ring-inset ring-warn-500/20">
+            <p>Rotating stops the current key at once and signs {member?.firstName} out everywhere. They’ll need the new key.</p>
+            <div className="mt-3 flex gap-2">
+              <Button size="sm" variant="danger" disabled={busy} onClick={() => void rotate()}>Rotate key</Button>
+              <Button size="sm" variant="secondary" disabled={busy} onClick={() => setConfirmRotate(false)}>Cancel</Button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" disabled={busy} onClick={() => setConfirmRotate(true)} className="inline-flex items-center gap-1.5 text-sm font-medium text-wine-600 hover:underline disabled:opacity-50"><RefreshCw className="h-3.5 w-3.5" /> Rotate key…</button>
+        )}
+        {error && <p className="text-sm text-bad-600">{error}</p>}
       </div>
     </Modal>
   )

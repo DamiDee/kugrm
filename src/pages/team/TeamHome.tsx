@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { CalendarX2, ChevronDown, LogOut, Phone, Users } from 'lucide-react'
 import { useStore } from '@/store/useStore'
-import { LIVE, tokens } from '@/lib/api'
+import { LIVE, tokens, type ApiError } from '@/lib/api'
 import { loadTeam } from '@/lib/live'
 import { positionsOf, sessionsOf, spotOccupants, teamScope, uncoveredSpots, useEventData, useMemberMap, type EventData } from '@/lib/selectors'
 import type { Member } from '@/data/types'
@@ -32,8 +32,9 @@ export default function TeamHome() {
   const [picked, setEventId] = useState('')
   const eventId = picked || activeEventId
   const [loadFailed, setLoadFailed] = useState(false)
+  const noSession = useStore((s) => s.teamNoSession)
   useEffect(() => {
-    if (LIVE && tokens.get('team')) loadTeam(picked || undefined).catch(() => setLoadFailed(true))
+    if (LIVE && tokens.get('team')) loadTeam(picked || undefined).catch((e: ApiError) => { if (e.status !== 404) setLoadFailed(true) })
   }, [picked])
   const data = useEventData(eventId)
   const memberMap = useMemberMap()
@@ -96,7 +97,9 @@ export default function TeamHome() {
           </p>
         )}
 
-        {me.role === 'leader' ? (
+        {LIVE && noSession ? (
+          <p className="surface p-6 text-sm text-ink-500">No current session available. The admin team will set one up.</p>
+        ) : me.role === 'leader' ? (
           <LeaderView data={data} coordinators={scope.coordinators} memberMap={memberMap} />
         ) : (
           <CoordinatorView data={data} zoneNames={new Set(me.coordinates ?? [])} memberMap={memberMap} />

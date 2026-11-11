@@ -18,13 +18,28 @@ export class ApiError extends Error {
   }
 }
 
-const KEYS = { access: 'grm-admin-access', refresh: 'grm-admin-refresh', team: 'grm-team-access' } as const
-type TokenKey = keyof typeof KEYS
+const KEYS = { access: 'grm-admin-access', refresh: 'grm-admin-refresh' } as const
+type TokenKey = 'access' | 'refresh' | 'team'
+
+/** Team JWT is kept only in application memory per security requirements. */
+let teamTokenMemory: string | null = null
+try { localStorage.removeItem('grm-team-access') } catch { /* ignore */ }
 
 export const tokens = {
-  get(k: TokenKey) { try { return localStorage.getItem(KEYS[k]) } catch { return null } },
-  set(k: TokenKey, v?: string | null) {
-    try { if (v) localStorage.setItem(KEYS[k], v); else localStorage.removeItem(KEYS[k]) } catch { /* blocked storage: the session lasts until reload */ }
+  get(k: TokenKey) {
+    if (k === 'team') return teamTokenMemory
+    try { return sessionStorage.getItem(KEYS[k]) ?? localStorage.getItem(KEYS[k]) } catch { return null }
+  },
+  set(k: TokenKey, v?: string | null, remember = true) {
+    if (k === 'team') {
+      teamTokenMemory = v ?? null
+      return
+    }
+    try {
+      sessionStorage.removeItem(KEYS[k])
+      localStorage.removeItem(KEYS[k])
+      if (v) (remember ? localStorage : sessionStorage).setItem(KEYS[k], v)
+    } catch { /* blocked storage: the session lasts until reload */ }
   },
 }
 
@@ -36,11 +51,16 @@ export interface RequestOpts {
   query?: Query
   /** which token to send; none for public endpoints */
   as?: 'admin' | 'team'
+  cache?: RequestCache
 }
 
 /** Called when the admin session can't be renewed. */
 let onSignedOut: () => void = () => {}
 export const setOnSignedOut = (fn: () => void) => { onSignedOut = fn }
+
+/** Called when the team session is unauthorized or revoked. */
+let onTeamSignedOut: () => void = () => {}
+export const setOnTeamSignedOut = (fn: () => void) => { onTeamSignedOut = fn }
 
 function url(path: string, query?: Query) {
   const q = new URLSearchParams()
@@ -55,7 +75,12 @@ async function send(path: string, opts: RequestOpts): Promise<Response> {
   if (token) headers.Authorization = `Bearer ${token}`
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
   try {
-    return await fetch(url(path, opts.query), { method: opts.method ?? 'GET', headers, body: opts.form ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined) })
+    return await fetch(url(path, opts.query), {
+      method: opts.method ?? 'GET',
+      headers,
+      body: opts.form ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
+      cache: opts.cache,
+    })
   } catch {
     throw new ApiError(0, 'NETWORK', 'Can’t reach the server. Check the connection and try again.')
   }
@@ -65,12 +90,14 @@ let refreshing: Promise<boolean> | null = null
 function refreshAdmin() {
   const refreshToken = tokens.get('refresh')
   if (!refreshToken) return Promise.resolve(false)
-  refreshing ??= send('/auth/refresh', { method: 'POST', body: { refreshToken } })
+  let remember = true
+  try { remember = !!localStorage.getItem(KEYS.refresh) } catch { /* ignore */ }
+  refreshing ??= send('/auth/refresh', { method: 'POST', body: { refreshToken }, cache: 'no-store' })
     .then(async (r) => {
       if (!r.ok) return false
       const d = await r.json()
-      tokens.set('access', d.accessToken)
-      if (d.refreshToken) tokens.set('refresh', d.refreshToken)
+      tokens.set('access', d.accessToken, remember)
+      if (d.refreshToken) tokens.set('refresh', d.refreshToken, remember)
       return true
     })
     .catch(() => false)
@@ -88,6 +115,9 @@ async function authed(path: string, opts: RequestOpts) {
   if (r.status === 401 && opts.as === 'admin' && path !== '/auth/login') {
     if (await refreshAdmin()) r = await send(path, opts)
     else onSignedOut()
+  } else if ((r.status === 401 || (r.status === 403 && path === '/team/me')) && opts.as === 'team') {
+    tokens.set('team', null)
+    onTeamSignedOut()
   }
   if (!r.ok) await fail(r)
   return r

@@ -2,8 +2,8 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '@/store/useStore'
 import { toast } from '@/components/ui/Toast'
-import type { Assignment, Member, MinistryEvent, Position, Zone } from '@/data/types'
-import { LIVE, api, ApiError, setOnSignedOut, tokens } from './api'
+import type { Assignment, FallbackKeyResponse, Member, MinistryEvent, Position, Zone } from '@/data/types'
+import { LIVE, api, ApiError, setOnSignedOut, setOnTeamSignedOut, tokens } from './api'
 import { normalizePhone } from './utils'
 import type { LookupResult } from './selectors'
 
@@ -74,15 +74,44 @@ export async function loadRoster(eventId: string) {
   replaceRoster(eventId, raw.map((z) => toZone(z, eventId)), raw.flatMap((z) => (z.positions ?? []).map((p: any) => toPosition(p, z.id))), as.map((a) => toAssignment(a, eventId)))
 }
 
+const toMember = (m: any): Member => {
+  const leaderIds = Array.isArray(m.leaderIds) && m.leaderIds.length ? m.leaderIds : m.leaderId ? [m.leaderId] : undefined
+  return {
+    ...m,
+    status: m.status ?? 'active',
+    leaderId: leaderIds?.[0] ?? m.leaderId,
+    leaderIds,
+  }
+}
+
 const loadEvents = async () => set({ events: items<MinistryEvent>(await api('/events', { as: 'admin' })) })
-const loadMembers = async () => set({ members: await allPages<Member>('/members') })
-async function loadFeeds() {
+const loadMembers = async () => {
+  const list = (await allPages<any>('/members')).map(toMember)
+  set({ members: list })
+}
+export async function loadFeeds() {
   const [activity, notes] = await Promise.all([api('/activity', { as: 'admin', query: { limit: 60 } }), api('/notifications', { as: 'admin' })])
   set({ activity: items(activity), notifications: items(notes) })
 }
 
 export async function syncAdmin() {
-  const [settings] = await Promise.all([api('/settings', { as: 'admin' }), loadEvents(), loadMembers(), loadFeeds()])
+  const [settings, me] = await Promise.all([
+    api('/settings', { as: 'admin' }),
+    api('/auth/me', { as: 'admin', cache: 'no-store' }).catch(() => null),
+    loadEvents(),
+    loadMembers(),
+    loadFeeds(),
+  ])
+  if (me) {
+    set((s) => ({
+      admin: {
+        id: me.id ?? s.admin?.id,
+        name: me.name ?? s.admin?.name ?? 'Admin',
+        email: me.email ?? s.admin?.email ?? '',
+        role: me.role ?? s.admin?.role ?? 'admin',
+      },
+    }))
+  }
   const { currentEventId, ...rest } = settings ?? {}
   const events = get().events
   const active = events.find((e) => e.id === currentEventId)?.id ?? events[0]?.id ?? ''
@@ -129,14 +158,13 @@ function installActions() {
   const o = get()
   set({
     logout: () => {
-      const refreshToken = tokens.get('refresh')
-      api('/auth/logout', { ...admin, method: 'POST', body: { refreshToken } }).catch(() => {})
+      api('/auth/logout', { ...admin, method: 'POST', cache: 'no-store' }).catch(() => {})
       tokens.set('access'); tokens.set('refresh')
       o.logout()
       set({ liveReady: false })
     },
     teamLogout: () => {
-      api('/team/auth/logout', { as: 'team', method: 'POST' }).catch(() => {})
+      api('/team/auth/logout', { as: 'team', method: 'POST', cache: 'no-store' }).catch(() => {})
       tokens.set('team')
       o.teamLogout()
     },
@@ -145,7 +173,22 @@ function installActions() {
       push(() => api('/settings/current-event', { ...admin, method: 'PUT', body: { eventId: id } }), { roster: id })
     },
     markNotificationsRead: () => { o.markNotificationsRead(); push(() => api('/notifications/read-all', { ...admin, method: 'POST' })) },
-    setTeamRole: (id, role, opts = {}) => { o.setTeamRole(id, role, opts); push(() => api(`/members/${id}/role`, { ...admin, method: 'PUT', body: { role, ...opts } }), { members: true }) },
+    setTeamRole: (id, role, opts = {}) => {
+      o.setTeamRole(id, role, opts)
+      const leaderIds = opts.leaderIds ?? (opts.leaderId ? [opts.leaderId] : [])
+      const body =
+        role === 'leader'
+          ? { role: 'leader' }
+          : role === 'usher'
+            ? { role: 'usher' }
+            : {
+                role: 'coordinator',
+                coordinates: opts.coordinates ?? [],
+                leaderIds,
+                ...(leaderIds.length === 1 ? { leaderId: leaderIds[0] } : {}),
+              }
+      push(() => api(`/members/${id}/role`, { ...admin, method: 'PUT', body, cache: 'no-store' }), { members: true })
+    },
 
     updateEvent: (id, patch) => { o.updateEvent(id, patch); push(() => api(`/events/${id}`, { ...admin, method: 'PATCH', body: patch }), { events: true }) },
     duplicateEvent: (id) => { push(() => api(`/events/${id}/duplicate`, { ...admin, method: 'POST' }).then((e: MinistryEvent) => loadRoster(e.id)), { events: true }); return '' },
@@ -232,18 +275,43 @@ export async function importFileLive(file: File, eventId: string) {
 
 export const teamRequestCode = (phone: string) => api('/team/auth/request-code', { method: 'POST', body: { phone: normalizePhone(phone) } })
 
-export async function teamVerify(phone: string, code: string) {
-  const r = await api('/team/auth/verify', { method: 'POST', body: { phone: normalizePhone(phone), code } })
+/** After a team sign-in: keep the token in memory only, then load the team page. */
+async function startTeamSession(r: any) {
   tokens.set('team', r.accessToken)
-  set({ teamUser: { memberId: r.member.id } })
-  await loadTeam()
+  const m = r.member
+  const known = get().members.find((x) => x.id === m.id)
+  set((s) => ({ teamUser: { memberId: m.id }, teamNoSession: false, members: [...s.members.filter((x) => x.id !== m.id), { status: 'active', ...known, ...m }] }))
+  await loadTeam().catch((e: unknown) => { if (!(e instanceof ApiError && e.status === 404)) throw e })
 }
+
+export async function teamVerify(phone: string, code: string) {
+  await startTeamSession(await api('/team/auth/verify', { method: 'POST', body: { phone: normalizePhone(phone), code }, cache: 'no-store' }))
+}
+
+/** Sign-in with the member's six-character offline key. The key is not kept anywhere. */
+export async function teamFallback(phone: string, key: string) {
+  await startTeamSession(await api('/team/auth/fallback', { method: 'POST', body: { phone: normalizePhone(phone), key: key.trim() }, cache: 'no-store' }))
+}
+
+/* ---------- offline keys (owner and admin only) ---------- */
+
+export const getFallbackKey = (memberId: string) => api<FallbackKeyResponse>(`/members/${memberId}/fallback-key`, { ...admin, cache: 'no-store' })
+/** Not idempotent: never call twice for one click, never retry. */
+export const rotateFallbackKey = (memberId: string) => api<FallbackKeyResponse>(`/members/${memberId}/fallback-key/rotate`, { ...admin, method: 'POST', cache: 'no-store' })
 
 const teamMember = (m: any, extra: Partial<Member> = {}): Member => ({ status: 'active', ...m, ...extra })
 
 /** Fills the store from /team/me, so the team page reads it like any other roster. */
 export async function loadTeam(eventId?: string) {
-  const r = await api('/team/me', { as: 'team', query: { eventId } })
+  let r: any
+  try {
+    r = await api('/team/me', { as: 'team', query: { eventId }, cache: 'no-store' })
+  } catch (e) {
+    // signed in, but no session has been set as current yet
+    if (e instanceof ApiError && e.status === 404) set({ teamNoSession: true })
+    throw e
+  }
+  set({ teamNoSession: false })
   const ev: MinistryEvent = r.event
   const zones: Zone[] = []
   const positions: Position[] = []
@@ -361,6 +429,11 @@ export function bootLive() {
     tokens.set('access'); tokens.set('refresh')
     useStore.setState({ admin: null, liveReady: false })
     toast.error('Your session has ended.', 'Please sign in again.')
+  })
+  setOnTeamSignedOut(() => {
+    const was = !!get().teamUser
+    set({ teamUser: null })
+    if (was) toast.error('Your team session has ended.', 'Please sign in again.')
   })
   void loadPublic().catch(showLoadError)
   if (tokens.get('access') && get().admin) void syncAdmin().catch(showLoadError)

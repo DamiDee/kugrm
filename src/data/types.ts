@@ -13,13 +13,22 @@ export interface Member {
   joinedYear?: number
   /** coordinators oversee a set of zones; leaders oversee coordinators */
   role?: MemberRole
-  /** for a coordinator: the leader they report to */
+  /** for a coordinator: the leader they report to (single leader) */
   leaderId?: string
+  /** for a coordinator: the leaders they report to (supports multiple leaders) */
+  leaderIds?: string[]
   /** for a coordinator: the zones they oversee, by name ("Section 41", "Aisle 5", "Door X3"), in every session */
   coordinates?: string[]
 }
 
 export type MemberRole = 'usher' | 'coordinator' | 'leader'
+export type AdminRole = 'owner' | 'admin' | 'editor'
+
+export interface FallbackKeyResponse {
+  memberId: string
+  key: string
+  rotatedAt: string
+}
 export type SessionPeriod = 'morning' | 'evening'
 
 export type EventStatus = 'draft' | 'active' | 'completed' | 'archived'
