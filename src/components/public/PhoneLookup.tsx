@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowRight, Phone, Search } from 'lucide-react'
-import { cn, formatPhoneInput, isValidNigerianPhone, normalizePhone } from '@/lib/utils'
+import { cn, formatPhoneInput, isValidPhone, normalizePhone } from '@/lib/utils'
 
 export function PhoneLookup({ initial = '', className, onDark = true, tga = false }: { initial?: string; className?: string; onDark?: boolean; /** gold button, for the TGA landing page */ tga?: boolean }) {
   const [value, setValue] = useState(formatPhoneInput(initial))
@@ -15,11 +15,11 @@ export function PhoneLookup({ initial = '', className, onDark = true, tga = fals
     if (loading) return
     const digits = normalizePhone(value)
     if (!digits) return setError('Enter the phone number you registered with the department.')
-    if (!isValidNigerianPhone(digits)) return setError('That doesn’t look like a Nigerian mobile number. It should have 11 digits, e.g. 0801 234 5678.')
+    if (!isValidPhone(digits)) return setError('That doesn’t look like a phone number. Use 11 digits for a Nigerian number (0801 234 5678), or include the country code for others (+44 7911 123456).')
     setError('')
     setLoading(true)
     // the lookup is instant; a short pause lets the scanning state register without feeling slow
-    setTimeout(() => navigate(`/assignment?phone=${digits}`), 420)
+    setTimeout(() => navigate(`/assignment?phone=${encodeURIComponent(digits)}`), 420)
   }
 
   return (

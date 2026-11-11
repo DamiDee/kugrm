@@ -6,7 +6,7 @@ import { LIVE } from '@/lib/api'
 import { teamFallback, teamRequestCode, teamVerify } from '@/lib/live'
 import { ApiError } from '@/lib/api'
 import { DEMO } from '@/data/mock'
-import { formatPhone, formatPhoneInput, isValidNigerianPhone } from '@/lib/utils'
+import { formatPhone, formatPhoneInput, isValidPhone } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { Field, Logo, Segmented } from '@/components/ui/misc'
 
@@ -58,7 +58,7 @@ export default function TeamLogin() {
 
   const submit = (e?: React.SyntheticEvent) => {
     e?.preventDefault()
-    if (!isValidNigerianPhone(phone)) return setError('Enter the 11-digit number registered with the department.')
+    if (!isValidPhone(phone)) return setError('Enter the number registered with the department. Include the country code if it isn’t Nigerian, e.g. +44.')
     if (LIVE) {
       if (method === 'key' && !/^[A-Za-z0-9]{6}$/.test(key.trim())) return setError('Enter your 6-character key, letters and digits only.')
       if (method === 'sms' && sent && !/^\d{6}$/.test(code.trim())) return setError('Enter the 6-digit code we sent you.')

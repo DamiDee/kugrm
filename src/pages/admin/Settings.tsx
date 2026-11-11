@@ -7,7 +7,7 @@ import { Field, PageHeader, Switch } from '@/components/ui/misc'
 import { ConfirmDialog } from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
 import { EventSelector } from '@/components/admin/EventSelector'
-import { formatPhone, isValidNigerianPhone, normalizePhone } from '@/lib/utils'
+import { formatPhone, isValidPhone, normalizePhone } from '@/lib/utils'
 
 export default function Settings() {
   const settings = useStore((s) => s.settings)
@@ -36,7 +36,7 @@ export default function Settings() {
             <Field label="Name" htmlFor="cn"><input id="cn" className="field" value={name} onChange={(e) => setName(e.target.value)} /></Field>
             <Field label="Phone" htmlFor="cp"><input id="cp" className="field tabular" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
           </div>
-          <Button className="mt-4" variant="primary" onClick={() => { if (!isValidNigerianPhone(phone)) return toast.error('Unable to save changes.', 'Enter a valid Nigerian phone number.'); update({ contactName: name, contactPhone: normalizePhone(phone) }); toast.success('Settings saved.') }}>Save contact</Button>
+          <Button className="mt-4" variant="primary" onClick={() => { if (!isValidPhone(phone)) return toast.error('Unable to save changes.', 'Enter a valid phone number. Include the country code for numbers outside Nigeria.'); update({ contactName: name, contactPhone: normalizePhone(phone) }); toast.success('Settings saved.') }}>Save contact</Button>
         </div>
       </div>
       {!LIVE && <div className="mt-8 rounded-2xl border border-dashed border-line-strong p-5">

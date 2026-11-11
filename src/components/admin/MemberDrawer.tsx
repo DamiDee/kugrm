@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeftRight, Crown, Mail, Pencil, Phone, Trash2, UserMinus, UserPlus, X } from 'lucide-react'
 import { useStore } from '@/store/useStore'
 import type { Member } from '@/data/types'
-import { cn, formatPhone, formatShortDate, fullName, isValidNigerianPhone, normalizePhone, telHref } from '@/lib/utils'
+import { cn, formatPhone, formatShortDate, fullName, isValidPhone, normalizePhone, telHref } from '@/lib/utils'
 import { Drawer, ConfirmDialog, Modal } from '@/components/ui/Modal'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
@@ -142,7 +142,7 @@ export function MemberForm({ open, onClose, member }: { open: boolean; onClose: 
     if (!f.firstName.trim()) e.firstName = 'Required'
     if (!f.lastName.trim()) e.lastName = 'Required'
     const phone = normalizePhone(f.phone)
-    if (!isValidNigerianPhone(phone)) e.phone = 'Enter an 11-digit Nigerian number'
+    if (!isValidPhone(phone)) e.phone = 'Enter a Nigerian number, or include the country code, e.g. +44 7911 123456'
     else if (members.some((m) => m.phone === phone && m.id !== member?.id)) e.phone = 'Another member already uses this number'
     setErrors(e)
     if (Object.keys(e).length) return

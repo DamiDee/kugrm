@@ -5,30 +5,56 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-/** Normalise any Nigerian number (+234 803…, 234803…, 0803 …) to 11-digit local form. */
+/**
+ * Normalise a phone number. Nigerian numbers (+234 803…, 234803…, 0803 …) become
+ * 11-digit local form, 08031234567. Any other country keeps its country code in
+ * international form, +447911123456, whether typed with +, 00 or just the digits.
+ */
 export function normalizePhone(raw: string): string {
-  let d = (raw || '').replace(/\D/g, '')
-  if (d.startsWith('234')) d = '0' + d.slice(3)
-  if (d.length === 10 && /^[789]/.test(d)) d = '0' + d
+  const s = (raw || '').trim()
+  let d = s.replace(/\D/g, '')
+  const intl = s.startsWith('+') || s.startsWith('00')
+  if (s.startsWith('00')) d = d.slice(2)
+  if (d.startsWith('234')) return '0' + d.slice(3).replace(/^0/, '')
+  if (intl) return d ? `+${d}` : ''
+  if (d.length === 10 && /^[789]/.test(d)) return '0' + d
+  // a long number that doesn't start with 0 already carries its country code
+  if (d.length >= 11 && /^[1-9]/.test(d)) return `+${d}`
   return d
 }
 
-export function isValidNigerianPhone(raw: string): boolean {
-  return /^0[789][01]\d{8}$/.test(normalizePhone(raw))
+/** A Nigerian mobile (0803…) or an international number with its country code (+44…). */
+export function isValidPhone(raw: string): boolean {
+  const p = normalizePhone(raw)
+  return /^0[789][01]\d{8}$/.test(p) || /^\+[1-9]\d{7,14}$/.test(p)
 }
 
-/** 08031234567 -> 0803 123 4567 */
+/** Calling codes with one or two digits; the rest have three. */
+const SHORT_CODES = /^(1|7|2[07]|3[0-469]|4[013-9]|5[1-8]|6[0-6]|8[1246]|9[0-58])/
+
+/** 08031234567 -> 0803 123 4567; +447911123456 -> +44 791 112 3456 */
 export function formatPhone(raw: string): string {
   const d = normalizePhone(raw)
+  if (d.startsWith('+')) {
+    const digits = d.slice(1)
+    const cc = digits.match(SHORT_CODES)?.[0] ?? digits.slice(0, 3)
+    const rest = digits.slice(cc.length)
+    return `+${cc}${rest ? ' ' + rest.replace(/(\d{3})(?=\d{4})/g, '$1 ') : ''}`
+  }
   if (d.length <= 4) return d
   if (d.length <= 7) return `${d.slice(0, 4)} ${d.slice(4)}`
   return `${d.slice(0, 4)} ${d.slice(4, 7)} ${d.slice(7, 11)}`
 }
 
-/** Formats as the user types, keeping only digits (max 11). */
+/** Formats as the user types: Nigerian numbers in local form (max 11 digits), others with their country code. */
 export function formatPhoneInput(raw: string): string {
-  let d = raw.replace(/\D/g, '')
-  if (d.startsWith('234')) d = '0' + d.slice(3)
+  const t = raw.trimStart()
+  let d = t.replace(/\D/g, '')
+  const plus = t.startsWith('+') || t.startsWith('00')
+  if (t.startsWith('00')) d = d.slice(2)
+  if (d.startsWith('234')) d = '0' + d.slice(3).replace(/^0/, '')
+  else if (plus) return `+${d.slice(0, 15)}`
+  else if (d && !d.startsWith('0')) return d.slice(0, 15)
   d = d.slice(0, 11)
   if (d.length <= 4) return d
   if (d.length <= 7) return `${d.slice(0, 4)} ${d.slice(4)}`
@@ -36,7 +62,8 @@ export function formatPhoneInput(raw: string): string {
 }
 
 export function telHref(phone: string) {
-  return `tel:+234${normalizePhone(phone).slice(1)}`
+  const p = normalizePhone(phone)
+  return p.startsWith('+') ? `tel:${p}` : `tel:+234${p.slice(1)}`
 }
 
 export function initials(first: string, last?: string) {

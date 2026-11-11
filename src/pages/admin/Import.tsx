@@ -7,7 +7,7 @@ import { useStore, type ImportRow } from '@/store/useStore'
 import { LIVE } from '@/lib/api'
 import { importFileLive } from '@/lib/live'
 import { useEventData } from '@/lib/selectors'
-import { cn, downloadFile, formatPhone, isValidNigerianPhone, normalizePhone } from '@/lib/utils'
+import { cn, downloadFile, formatPhone, isValidPhone, normalizePhone } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { PageHeader, Select } from '@/components/ui/misc'
 import { toast } from '@/components/ui/Toast'
@@ -122,7 +122,7 @@ export default function Import() {
       const issues: Issue[] = []
       if (!r.firstName || !r.lastName) issues.push({ level: 'error', msg: 'Missing name' })
       if (!r.phone) issues.push({ level: 'error', msg: 'Missing phone number' })
-      else if (!isValidNigerianPhone(phone)) issues.push({ level: 'error', msg: 'Invalid phone number' })
+      else if (!isValidPhone(phone)) issues.push({ level: 'error', msg: 'Invalid phone number' })
       else if (existing.has(phone)) issues.push({ level: 'error', msg: 'Phone already belongs to a member' })
       else if (seen.has(phone)) issues.push({ level: 'error', msg: `Duplicate of row ${seen.get(phone)}` })
       if (phone && !seen.has(phone)) seen.set(phone, i + 2)

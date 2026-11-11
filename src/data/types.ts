@@ -4,7 +4,7 @@ export interface Member {
   id: string
   firstName: string
   lastName: string
-  phone: string // stored normalised: 11 digits, e.g. 08031234567
+  phone: string // stored normalised: 08031234567 for Nigeria, +447911123456 elsewhere
   email?: string
   memberId?: string
   gender?: Gender
