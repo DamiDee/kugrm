@@ -1,22 +1,50 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useIsPresent } from 'framer-motion'
 import { X, AlertTriangle } from 'lucide-react'
 import { Button } from './Button'
 import { cn } from '@/lib/utils'
+
+/**
+ * Page scrolling stays locked while any dialog, drawer or sheet is open. A
+ * count, rather than saving and restoring the old value, so closing them in any
+ * order can't leave the page stuck without scrolling.
+ */
+let scrollLocks = 0
+export function lockScroll() {
+  if (scrollLocks++ === 0) document.body.style.overflow = 'hidden'
+  return () => {
+    scrollLocks = Math.max(0, scrollLocks - 1)
+    if (scrollLocks === 0) document.body.style.overflow = ''
+  }
+}
 
 function useEscape(open: boolean, onClose: () => void) {
   useEffect(() => {
     if (!open) return
     const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', h)
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    const unlock = lockScroll()
     return () => {
       window.removeEventListener('keydown', h)
-      document.body.style.overflow = prev
+      unlock()
     }
   }, [open, onClose])
+}
+
+/**
+ * The full-screen layer behind a dialog, drawer or menu. It has to be a motion
+ * element so AnimatePresence removes it once closing has finished; a plain div
+ * here stays on top of the page, invisible, and blocks every tap. While it is
+ * closing it already lets taps through.
+ */
+export function Layer({ className, children }: { className: string; children: React.ReactNode }) {
+  const present = useIsPresent()
+  return (
+    <motion.div className={className} style={{ pointerEvents: present ? undefined : 'none' }} initial={{ opacity: 1 }} animate={{ opacity: 1 }} exit={{ opacity: 1 }} transition={{ duration: 0.3 }}>
+      {children}
+    </motion.div>
+  )
 }
 
 function useAutoFocus(open: boolean) {
@@ -53,7 +81,7 @@ export function Modal({
   return createPortal(
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
+        <Layer className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
           <motion.div className="absolute inset-0 bg-ink-950/40 backdrop-blur-[2px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }} onClick={onClose} />
           <motion.div
             ref={ref}
@@ -78,7 +106,7 @@ export function Modal({
             {children && <div className="scrollbar-thin overflow-y-auto px-6 py-3">{children}</div>}
             {footer && <div className="flex flex-col-reverse gap-2 border-t border-line bg-paper px-6 py-4 sm:flex-row sm:justify-end">{footer}</div>}
           </motion.div>
-        </div>
+        </Layer>
       )}
     </AnimatePresence>,
     document.body,
@@ -127,7 +155,7 @@ export function Drawer({ open, onClose, children, label, width = 'max-w-md' }: {
   return createPortal(
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-40">
+        <Layer className="fixed inset-0 z-40">
           <motion.div className="absolute inset-0 bg-ink-950/25" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
           <motion.aside
             ref={ref}
@@ -142,7 +170,7 @@ export function Drawer({ open, onClose, children, label, width = 'max-w-md' }: {
           >
             {children}
           </motion.aside>
-        </div>
+        </Layer>
       )}
     </AnimatePresence>,
     document.body,
@@ -155,7 +183,7 @@ export function BottomSheet({ open, onClose, children, label }: { open: boolean;
   return createPortal(
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-40">
+        <Layer className="fixed inset-0 z-40">
           <motion.div className="absolute inset-0 bg-ink-950/25" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
           <motion.aside
             role="dialog"
@@ -170,7 +198,7 @@ export function BottomSheet({ open, onClose, children, label }: { open: boolean;
             <SheetHandle onClose={onClose} />
             <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
           </motion.aside>
-        </div>
+        </Layer>
       )}
     </AnimatePresence>,
     document.body,

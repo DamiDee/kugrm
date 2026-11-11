@@ -9,7 +9,7 @@ import { cn, timeAgo } from '@/lib/utils'
 import { Logo, Popover } from '@/components/ui/misc'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
-import { ConfirmDialog } from '@/components/ui/Modal'
+import { ConfirmDialog, Layer } from '@/components/ui/Modal'
 import { EventSelector } from '@/components/admin/EventSelector'
 import { CommandPalette } from '@/components/admin/CommandPalette'
 import { PublishButton } from '@/components/admin/PublishFlow'
@@ -125,13 +125,13 @@ export default function AdminLayout() {
 
       <AnimatePresence>
         {mobileNav && (
-          <div className="fixed inset-0 z-40 lg:hidden">
+          <Layer className="fixed inset-0 z-40 lg:hidden">
             <motion.div className="absolute inset-0 bg-ink-950/30" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setMobileNav(false)} />
             <motion.aside initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} transition={{ type: 'tween', duration: 0.25 }} className="absolute inset-y-0 left-0 w-[280px] bg-canvas shadow-float">
               <button onClick={() => setMobileNav(false)} className="absolute right-3 top-5 rounded-lg p-2 text-ink-500" aria-label="Close menu"><X className="h-5 w-5" /></button>
               <SidebarContent onNavigate={() => setMobileNav(false)} />
             </motion.aside>
-          </div>
+          </Layer>
         )}
       </AnimatePresence>
 

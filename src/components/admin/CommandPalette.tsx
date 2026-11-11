@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { Layer } from '@/components/ui/Modal'
 import { CalendarDays, CornerDownLeft, LayoutGrid, MapPin, Search, User } from 'lucide-react'
 import { useStore } from '@/store/useStore'
 import { useEventData } from '@/lib/selectors'
@@ -68,7 +69,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   return createPortal(
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[12vh]">
+        <Layer className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[12vh]">
           <motion.div className="absolute inset-0 bg-ink-950/35 backdrop-blur-[2px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
           <motion.div
             role="dialog"
@@ -134,7 +135,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
               <span className="ml-auto flex items-center gap-1"><User className="h-3 w-3" /> {members.length.toLocaleString()} members indexed</span>
             </div>
           </motion.div>
-        </div>
+        </Layer>
       )}
     </AnimatePresence>,
     document.body,
