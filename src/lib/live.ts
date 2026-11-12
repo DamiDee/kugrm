@@ -244,11 +244,30 @@ function installActions() {
 /* ---------- sign-in ---------- */
 
 export async function adminLogin(email: string, password: string, remember: boolean) {
-  const r = await api('/auth/login', { method: 'POST', body: { email, password, remember } })
-  tokens.set('access', r.accessToken)
-  tokens.set('refresh', r.refreshToken)
-  set({ admin: { name: r.user?.name ?? email.split('@')[0], email: r.user?.email ?? email }, liveReady: false })
+  const r = await api('/auth/login', { method: 'POST', body: { email, password, remember }, cache: 'no-store' })
+  tokens.set('access', r.accessToken, remember)
+  tokens.set('refresh', r.refreshToken, remember)
+  set({
+    admin: {
+      id: r.user?.id,
+      name: r.user?.name ?? email.split('@')[0],
+      email: r.user?.email ?? email,
+      role: r.user?.role ?? 'admin',
+    },
+    liveReady: false,
+  })
   void syncAdmin().catch(showLoadError)
+}
+
+export async function adminForgotPassword(email: string) {
+  await api('/auth/forgot-password', { method: 'POST', body: { email: email.trim() }, cache: 'no-store' })
+}
+
+export async function adminResetPassword(token: string, password: string) {
+  await api('/auth/reset-password', { method: 'POST', body: { token: token.trim(), password }, cache: 'no-store' })
+  tokens.set('access')
+  tokens.set('refresh')
+  set({ admin: null, liveReady: false })
 }
 
 /** Creates an event on the server, so the app can open it by its real id. */
@@ -295,9 +314,17 @@ export async function teamFallback(phone: string, key: string) {
 
 /* ---------- offline keys (owner and admin only) ---------- */
 
-export const getFallbackKey = (memberId: string) => api<FallbackKeyResponse>(`/members/${memberId}/fallback-key`, { ...admin, cache: 'no-store' })
+export const getFallbackKey = async (memberId: string) => {
+  const res = await api<FallbackKeyResponse>(`/members/${memberId}/fallback-key`, { ...admin, cache: 'no-store' })
+  void loadFeeds().catch(() => {})
+  return res
+}
 /** Not idempotent: never call twice for one click, never retry. */
-export const rotateFallbackKey = (memberId: string) => api<FallbackKeyResponse>(`/members/${memberId}/fallback-key/rotate`, { ...admin, method: 'POST', cache: 'no-store' })
+export const rotateFallbackKey = async (memberId: string) => {
+  const res = await api<FallbackKeyResponse>(`/members/${memberId}/fallback-key/rotate`, { ...admin, method: 'POST', cache: 'no-store' })
+  void loadFeeds().catch(() => {})
+  return res
+}
 
 const teamMember = (m: any, extra: Partial<Member> = {}): Member => ({ status: 'active', ...m, ...extra })
 

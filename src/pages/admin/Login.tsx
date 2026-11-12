@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { ArrowLeft, Eye, EyeOff, Lock } from 'lucide-react'
 import { useStore } from '@/store/useStore'
 import { LIVE } from '@/lib/api'
-import { adminLogin } from '@/lib/live'
+import { adminForgotPassword, adminLogin } from '@/lib/live'
 import { Button } from '@/components/ui/Button'
 import { Field, Logo } from '@/components/ui/misc'
 import { toast } from '@/components/ui/Toast'
@@ -80,7 +80,21 @@ export default function AdminLogin() {
                 <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 rounded accent-wine-600" />
                 Remember me
               </label>
-              <button type="button" className="font-medium text-wine-600 hover:text-wine-700" onClick={() => toast.info('Password reset link sent', `If ${email} is an admin account, a link is on its way.`)}>
+              <button
+                type="button"
+                className="font-medium text-wine-600 hover:text-wine-700"
+                onClick={() => {
+                  if (!/^\S+@\S+\.\S+$/.test(email)) return setErrors({ email: 'Enter your email address first.' })
+                  setErrors({})
+                  if (LIVE) {
+                    adminForgotPassword(email)
+                      .then(() => toast.info('Password reset link sent', `If ${email} is an admin account, a link is on its way.`))
+                      .catch((err: Error) => toast.error('Could not request reset', err.message))
+                  } else {
+                    toast.info('Password reset link sent', `If ${email} is an admin account, a link is on its way.`)
+                  }
+                }}
+              >
                 Forgot password?
               </button>
             </div>
