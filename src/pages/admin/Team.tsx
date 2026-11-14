@@ -68,14 +68,19 @@ export default function Team() {
         <div className="space-y-5">
           {groups.map((g) => (
             <section key={g.leader?.id ?? 'none'} className="surface overflow-hidden">
-              <header className="flex flex-wrap items-center gap-3 border-b border-line bg-paper px-4 py-3">
-                {g.leader ? <Avatar first={g.leader.firstName} last={g.leader.lastName} size="sm" /> : <span className="grid h-8 w-8 place-items-center rounded-full bg-white ring-1 ring-line"><Crown className="h-4 w-4 text-ink-300" /></span>}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2"><span className="truncate font-semibold text-ink-900">{g.leader ? fullName(g.leader) : 'No leader'}</span>{g.leader && <span className="rounded-full bg-gold-100 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-gold-700 ring-1 ring-gold-300/60">Leader</span>}</div>
-                  <div className="text-xs text-ink-500">{g.list.length} coordinator{g.list.length === 1 ? '' : 's'}{g.leader && <> · <a href={telHref(g.leader.phone)} className="hover:text-wine-600">{formatPhone(g.leader.phone)}</a></>}</div>
+              <header className="flex flex-wrap items-start justify-between gap-3 border-b border-line bg-paper px-4 py-3.5 sm:items-center">
+                <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center">
+                  {g.leader ? <Avatar first={g.leader.firstName} last={g.leader.lastName} size="sm" /> : <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white ring-1 ring-line"><Crown className="h-4 w-4 text-ink-300" /></span>}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="break-words font-semibold leading-snug text-ink-900">{g.leader ? fullName(g.leader) : 'No leader'}</span>
+                      {g.leader && <span className="rounded-full bg-gold-100 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-gold-700 ring-1 ring-gold-300/60">Leader</span>}
+                    </div>
+                    <div className="mt-0.5 break-words text-xs leading-relaxed text-ink-500">{g.list.length} coordinator{g.list.length === 1 ? '' : 's'}{g.leader && <> · <a href={telHref(g.leader.phone)} className="hover:text-wine-600 tabular">{formatPhone(g.leader.phone)}</a></>}</div>
+                  </div>
                 </div>
                 {g.leader && (
-                  <div className="flex gap-1">
+                  <div className="flex shrink-0 items-center gap-1">
                     <Button size="sm" variant="secondary" onClick={() => setEdit({ open: true, leaderId: g.leader!.id })}><UserPlus className="h-3.5 w-3.5" /> Coordinator</Button>
                     {canKeys && <Button size="icon-sm" variant="ghost" onClick={() => setKeyFor(g.leader!)} aria-label={`Offline key for ${fullName(g.leader)}`} title="Offline key"><KeyRound className="h-3.5 w-3.5" /></Button>}
                     <Button size="icon-sm" variant="ghost" className="hover:text-bad-500" onClick={() => setRemove(g.leader!)} aria-label={`Remove ${fullName(g.leader)} as leader`}><Trash2 className="h-3.5 w-3.5" /></Button>
@@ -117,20 +122,26 @@ function CoordinatorLine({ c, data, onEdit, onRemove, onKey }: { c: Member; data
   const ids = new Set(zs.map((z) => z.zone.id))
   const away = data.unavailable.filter((a) => ids.has(a.zoneId)).length
   return (
-    <li className="flex items-center gap-3 px-4 py-3">
+    <li className="flex items-start gap-3 px-4 py-3.5 sm:items-center">
       <Avatar first={c.firstName} last={c.lastName} size="sm" />
       <div className="min-w-0 flex-1">
-        <div className="truncate font-medium text-ink-900">{fullName(c)}</div>
-        <div className="truncate text-xs text-ink-500">{zoneSummary(c.coordinates)}</div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="break-words font-medium leading-snug text-ink-900">{fullName(c)}</span>
+          <span className="rounded-full bg-paper px-2 py-0.5 text-[11px] font-semibold text-ink-700 ring-1 ring-line tabular sm:hidden">{assigned}/{required}</span>
+        </div>
+        <div className="mt-0.5 break-words text-xs leading-relaxed text-ink-500">{zoneSummary(c.coordinates)}</div>
+        {c.phone && <a href={telHref(c.phone)} className="mt-1 inline-flex items-center gap-1 text-xs text-wine-600 hover:underline tabular md:hidden"><Phone className="h-3 w-3" />{formatPhone(c.phone)}</a>}
       </div>
       <div className="hidden shrink-0 text-right text-xs sm:block">
         <div className="font-semibold text-ink-900 tabular">{assigned}/{required}</div>
         {away > 0 ? <div className="inline-flex items-center gap-1 text-bad-600"><CalendarX2 className="h-3 w-3" />{away} away</div> : <div className="text-ink-400">this session</div>}
       </div>
       <a href={telHref(c.phone)} className="hidden h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] text-ink-700 ring-1 ring-line md:inline-flex"><Phone className="h-3.5 w-3.5 text-wine-500" />{formatPhone(c.phone)}</a>
-      {onKey && <Button size="icon-sm" variant="ghost" onClick={onKey} aria-label={`Offline key for ${fullName(c)}`} title="Offline key"><KeyRound className="h-3.5 w-3.5" /></Button>}
-      <Button size="icon-sm" variant="ghost" onClick={onEdit} aria-label={`Edit ${fullName(c)}`}><Pencil className="h-3.5 w-3.5" /></Button>
-      <Button size="icon-sm" variant="ghost" className="hover:text-bad-500" onClick={onRemove} aria-label={`Remove ${fullName(c)}`}><Trash2 className="h-3.5 w-3.5" /></Button>
+      <div className="flex shrink-0 items-center gap-0.5">
+        {onKey && <Button size="icon-sm" variant="ghost" onClick={onKey} aria-label={`Offline key for ${fullName(c)}`} title="Offline key"><KeyRound className="h-3.5 w-3.5" /></Button>}
+        <Button size="icon-sm" variant="ghost" onClick={onEdit} aria-label={`Edit ${fullName(c)}`}><Pencil className="h-3.5 w-3.5" /></Button>
+        <Button size="icon-sm" variant="ghost" className="hover:text-bad-500" onClick={onRemove} aria-label={`Remove ${fullName(c)}`}><Trash2 className="h-3.5 w-3.5" /></Button>
+      </div>
     </li>
   )
 }

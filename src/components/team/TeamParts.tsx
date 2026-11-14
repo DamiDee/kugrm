@@ -107,63 +107,68 @@ export function ZoneRosterCard({ r, highlight, id }: { r: ZoneRoster; highlight?
   const note = zoneNote(r.zone)
   return (
     <section id={id} className={cn('rounded-2xl border bg-white transition-shadow', highlight ? 'border-wine-400 shadow-float' : 'border-line')}>
-      <header className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
-        <div className="min-w-0">
+      <header className="flex items-start justify-between gap-3 border-b border-line px-4 py-3.5">
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="truncate text-[13px] font-bold uppercase tracking-[0.12em] text-ink-900">{r.zone.name}</h3>
+            <h3 className="break-words text-[13px] font-bold uppercase tracking-[0.12em] text-ink-900">{r.zone.name}</h3>
             {r.lead && (
               <span className="inline-flex items-center gap-1 rounded-full bg-gold-100/80 px-2 py-0.5 text-[11px] font-medium text-gold-700 ring-1 ring-gold-300/50">
-                <Crown className="h-3 w-3" /> Lead: {fullName(r.lead)}
+                <Crown className="h-3 w-3 shrink-0" />
+                <span className="break-words">Lead: {fullName(r.lead)}</span>
               </span>
             )}
           </div>
-          {note && <p className="mt-0.5 truncate text-xs text-ink-500">{note}</p>}
+          {note && <p className="mt-0.5 break-words text-xs leading-relaxed text-ink-500">{note}</p>}
         </div>
         <div className="shrink-0 text-right text-xs">
           <div className="font-semibold text-ink-900 tabular">{r.assigned}/{r.required} ushers</div>
-          <div className="flex items-center justify-end gap-1.5">
+          <div className="flex flex-wrap items-center justify-end gap-1">
             {r.confirmed > 0 && <span className="text-ok-600 tabular">{r.confirmed} confirmed ·</span>}
             <span className={cn(short ? 'text-wine-600' : 'text-ok-600')}>{short ? `${short} open` : 'Full'}</span>
           </div>
         </div>
       </header>
       {(r.leaders.length > 0 || r.coordinators.length > 0) && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-line bg-paper/70 px-4 py-2 text-xs">
+        <div className="space-y-2 border-b border-line bg-paper/70 px-4 py-3 text-xs">
           {r.leaders.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="inline-flex items-center gap-1 font-semibold uppercase tracking-[0.08em] text-wine-700">
-                <Crown className="h-3 w-3 text-wine-600" />
-                {r.leaders.length > 1 ? 'Leaders:' : 'Leader:'}
-              </span>
-              {r.leaders.map((l) => (
-                <span key={l.id} className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 font-medium text-ink-800 ring-1 ring-line">
-                  <span>{fullName(l)}</span>
-                  {l.phone && (
-                    <a href={telHref(l.phone)} className="inline-flex items-center gap-0.5 text-wine-600 hover:underline" aria-label={`Call ${fullName(l)}`}>
-                      <Phone className="h-2.5 w-2.5" />
-                      <span className="hidden sm:inline tabular">{formatPhone(l.phone)}</span>
-                    </a>
-                  )}
-                </span>
-              ))}
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-wine-700">
+                <Crown className="h-3 w-3 shrink-0 text-wine-600" />
+                <span>{r.leaders.length > 1 ? 'Section leaders' : 'Section leader'}</span>
+              </div>
+              <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap">
+                {r.leaders.map((l) => (
+                  <div key={l.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white px-3 py-1.5 font-medium text-ink-900 ring-1 ring-line sm:inline-flex sm:rounded-full sm:py-1">
+                    <span className="break-words leading-snug">{fullName(l)}</span>
+                    {l.phone && (
+                      <a href={telHref(l.phone)} className="inline-flex shrink-0 items-center gap-1 text-wine-600 hover:underline tabular" aria-label={`Call ${fullName(l)}`}>
+                        <Phone className="h-3 w-3 shrink-0" />
+                        <span>{formatPhone(l.phone)}</span>
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           {r.coordinators.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="font-semibold uppercase tracking-[0.08em] text-ink-500">
-                {r.coordinators.length > 1 ? 'Coordinators:' : 'Coordinator:'}
-              </span>
-              {r.coordinators.map((c) => (
-                <span key={c.id} className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 font-medium text-ink-800 ring-1 ring-line">
-                  <span>{fullName(c)}</span>
-                  {c.phone && (
-                    <a href={telHref(c.phone)} className="inline-flex items-center gap-0.5 text-wine-600 hover:underline" aria-label={`Call ${fullName(c)}`}>
-                      <Phone className="h-2.5 w-2.5" />
-                      <span className="hidden sm:inline tabular">{formatPhone(c.phone)}</span>
-                    </a>
-                  )}
-                </span>
-              ))}
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-500">
+                {r.coordinators.length > 1 ? 'Coordinators' : 'Coordinator'}
+              </div>
+              <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap">
+                {r.coordinators.map((c) => (
+                  <div key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white px-3 py-1.5 font-medium text-ink-900 ring-1 ring-line sm:inline-flex sm:rounded-full sm:py-1">
+                    <span className="break-words leading-snug">{fullName(c)}</span>
+                    {c.phone && (
+                      <a href={telHref(c.phone)} className="inline-flex shrink-0 items-center gap-1 text-wine-600 hover:underline tabular" aria-label={`Call ${fullName(c)}`}>
+                        <Phone className="h-3 w-3 shrink-0" />
+                        <span>{formatPhone(c.phone)}</span>
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -173,32 +178,33 @@ export function ZoneRosterCard({ r, highlight, id }: { r: ZoneRoster; highlight?
           <li className="px-4 py-4 text-center text-xs text-ink-400">No positions configured for this section yet.</li>
         )}
         {r.rows.map((row, i) => (
-          <li key={i} className="flex items-center gap-3 px-4 py-2.5">
+          <li key={i} className="flex items-start justify-between gap-3 px-4 py-3 sm:items-center">
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-x-2 text-sm">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
                 {row.member ? (
-                  <span className="truncate font-medium text-ink-900">{fullName(row.member)}</span>
+                  <span className="break-words font-medium leading-snug text-ink-900">{fullName(row.member)}</span>
                 ) : row.away ? (
-                  <span className="truncate font-medium text-ink-400 line-through">{fullName(row.away)}</span>
+                  <span className="break-words font-medium leading-snug text-ink-400 line-through">{fullName(row.away)}</span>
                 ) : (
                   <span className="font-medium text-wine-600">Open</span>
                 )}
-                {row.isLead && <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gold-700"><Crown className="h-3 w-3" />Lead</span>}
+                {row.isLead && <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gold-700"><Crown className="h-3 w-3 shrink-0" />Lead</span>}
               </div>
-              <div className="truncate text-xs text-ink-500">
+              <div className="mt-0.5 break-words text-xs leading-relaxed text-ink-500">
                 {row.position.name} · {DUTY_LABEL[dutyOf(row.position)]}
                 {row.status === 'unavailable' && <span className="text-bad-600"> · can’t make it{row.reason ? ` (${row.reason})` : ''}</span>}
               </div>
             </div>
             {row.member ? (
-              <>
-                {row.status === 'confirmed' ? <CheckCircle2 className="h-4 w-4 shrink-0 text-ok-500" aria-label="Confirmed" /> : <span className="shrink-0 text-[11px] text-ink-400">Not confirmed</span>}
-                <a href={telHref(row.member.phone)} aria-label={`Call ${fullName(row.member)}`} className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium text-ink-700 ring-1 ring-line hover:ring-line-strong">
-                  <Phone className="h-3.5 w-3.5 text-wine-500" /><span className="hidden sm:inline tabular">{formatPhone(row.member.phone)}</span><span className="sm:hidden">Call</span>
+              <div className="flex shrink-0 items-center gap-2">
+                {row.status === 'confirmed' ? <CheckCircle2 className="h-4 w-4 shrink-0 text-ok-500" aria-label="Confirmed" /> : <span className="hidden shrink-0 text-[11px] text-ink-400 sm:inline">Not confirmed</span>}
+                <a href={telHref(row.member.phone)} aria-label={`Call ${fullName(row.member)}`} className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-white px-3 text-[12px] font-medium text-ink-700 ring-1 ring-line hover:ring-line-strong sm:text-[12.5px]">
+                  <Phone className="h-3.5 w-3.5 shrink-0 text-wine-500" />
+                  <span className="tabular">{formatPhone(row.member.phone)}</span>
                 </a>
-              </>
+              </div>
             ) : row.away ? (
-              <CalendarX2 className="h-4 w-4 shrink-0 text-bad-500" aria-label="Can’t make it" />
+              <CalendarX2 className="mt-0.5 h-4 w-4 shrink-0 text-bad-500 sm:mt-0" aria-label="Can’t make it" />
             ) : null}
           </li>
         ))}

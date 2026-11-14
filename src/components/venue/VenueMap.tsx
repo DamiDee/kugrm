@@ -694,8 +694,8 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
             </p>
           ) : hoveredSpot ? (
             <>
-              <p className="truncate font-semibold text-ink-900">{hoveredSpot.zoneName}<span className="font-normal text-ink-500"> · {hoveredSpot.name}</span></p>
-              <p className="truncate text-ink-500">
+              <p className="break-words font-semibold leading-snug text-ink-900">{hoveredSpot.zoneName}<span className="font-normal text-ink-500"> · {hoveredSpot.name}</span></p>
+              <p className="break-words leading-relaxed text-ink-500">
                 {occupants?.[hoveredSpot.positionId] ?? (uncovered?.[hoveredSpot.positionId] ? `Open: ${uncovered[hoveredSpot.positionId]} can't make it` : 'Open seat')}
                 {info[hoveredSpot.zoneId]?.leaders?.length ? ` · Leader: ${info[hoveredSpot.zoneId].leaders!.join(', ')}` : ''}
                 {onSelectSpot ? ' · tap to assign' : ''}
@@ -703,9 +703,9 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
             </>
           ) : activeZone ? (
             <>
-              <p className="truncate font-semibold text-ink-900">{activeZone.name}{zoneNote(activeZone) && <span className="font-normal text-ink-500"> · {zoneNote(activeZone)}</span>}</p>
+              <p className="break-words font-semibold leading-snug text-ink-900">{activeZone.name}{zoneNote(activeZone) && <span className="font-normal text-ink-500"> · {zoneNote(activeZone)}</span>}</p>
               {info[activeZone.id] && (
-                <p className="truncate text-ink-500 tabular">
+                <p className="break-words leading-relaxed text-ink-500 tabular">
                   {info[activeZone.id].assigned != null ? (
                     <>
                       {info[activeZone.id].assigned ?? 0}{info[activeZone.id].required ? ` of ${info[activeZone.id].required}` : ''} ushers

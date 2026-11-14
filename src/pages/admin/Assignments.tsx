@@ -182,12 +182,16 @@ export default function Assignments() {
                 </table>
               </div>
               <ul className="divide-y divide-line md:hidden">
-                {pageRows.map(({ a, m, z, p }) => (
-                  <li key={a.id} className="flex items-center gap-3 px-4 py-3">
+                {pageRows.map(({ a, m, z, p, lead }) => (
+                  <li key={a.id} className="flex items-start gap-3 px-4 py-3.5">
                     <Avatar first={m.firstName} last={m.lastName} size="sm" />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium text-ink-900">{fullName(m)}</div>
-                      <div className="truncate text-xs text-ink-500">{z.name} · {p.name}{a.status === 'unavailable' && <span className="text-bad-600"> · can’t make it</span>}</div>
+                      <div className="break-words font-medium leading-snug text-ink-900">{fullName(m)}</div>
+                      <div className="mt-0.5 break-words text-xs leading-relaxed text-ink-500">
+                        {z.name} · {p.name}
+                        {lead && ` · Lead: ${fullName(lead)}`}
+                        {a.status === 'unavailable' && <span className="text-bad-600"> · can’t make it</span>}
+                      </div>
                     </div>
                     <Button size="icon-sm" variant="ghost" onClick={() => setAssign({ open: true, memberId: m.id })} aria-label="Edit"><Pencil className="h-3.5 w-3.5" /></Button>
                   </li>

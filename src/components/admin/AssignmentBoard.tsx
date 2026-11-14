@@ -30,14 +30,14 @@ export function AssignmentBoard({ data, focusZoneId, onAssign, onOpenZone, filte
             aria-labelledby={`zone-${zs.zone.id}`}
           >
             <header className="flex items-start justify-between gap-3 px-5 pb-3 pt-4">
-              <button onClick={() => onOpenZone(zs.zone.id)} className="min-w-0 text-left">
-                <h3 id={`zone-${zs.zone.id}`} className="text-[13px] font-bold uppercase tracking-[0.12em] text-ink-900 group-hover:text-wine-700">{zs.zone.name}</h3>
-                <p className="mt-0.5 text-xs text-ink-500 tabular">
+              <button onClick={() => onOpenZone(zs.zone.id)} className="min-w-0 flex-1 text-left">
+                <h3 id={`zone-${zs.zone.id}`} className="break-words text-[13px] font-bold uppercase tracking-[0.12em] text-ink-900 group-hover:text-wine-700">{zs.zone.name}</h3>
+                <p className="mt-0.5 break-words text-xs leading-relaxed text-ink-500 tabular">
                   {zs.assigned} of {zs.required} ushers
                   {zs.lead ? ` · Lead ${fullName(zs.lead)}` : ''}
                 </p>
                 {(zs.leaders.length > 0 || zs.coordinators.length > 0) && (
-                  <p className="mt-0.5 truncate text-[11.5px] text-ink-500">
+                  <p className="mt-0.5 break-words text-[11.5px] leading-relaxed text-ink-500">
                     {zs.leaders.length > 0 && (
                       <span>Leader{zs.leaders.length > 1 ? 's' : ''}: <span className="font-medium text-ink-700">{zs.leaders.map(fullName).join(', ')}</span></span>
                     )}
@@ -48,7 +48,7 @@ export function AssignmentBoard({ data, focusZoneId, onAssign, onOpenZone, filte
                   </p>
                 )}
               </button>
-              <button onClick={() => onOpenZone(zs.zone.id)} className="rounded-lg p-1.5 text-ink-400 hover:bg-paper hover:text-ink-700" aria-label={`Open ${zs.zone.name}`}><Maximize2 className="h-3.5 w-3.5" /></button>
+              <button onClick={() => onOpenZone(zs.zone.id)} className="shrink-0 rounded-lg p-1.5 text-ink-400 hover:bg-paper hover:text-ink-700" aria-label={`Open ${zs.zone.name}`}><Maximize2 className="h-3.5 w-3.5" /></button>
             </header>
             <div className="px-5"><ProgressBar value={zs.coverage} tone={zs.coverage >= 95 ? 'ok' : zs.coverage >= 85 ? 'gold' : 'wine'} delay={i * 0.02} /></div>
             <dl className="flex-1 px-5 py-3">
@@ -57,9 +57,9 @@ export function AssignmentBoard({ data, focusZoneId, onAssign, onOpenZone, filte
                 const names = people.slice(0, 2).map((a) => memberMap.get(a.memberId)).filter(Boolean)
                 return (
                   <div key={p.id} className="flex items-baseline gap-3 border-b border-dashed border-line py-2 text-[13px] last:border-0">
-                    <dt className="w-[42%] shrink-0 truncate text-ink-500">{p.name}</dt>
-                    <dd className="flex min-w-0 flex-1 items-baseline text-ink-900">
-                      <span className="min-w-0 truncate">
+                    <dt className="w-[42%] shrink-0 break-words text-ink-500">{p.name}</dt>
+                    <dd className="flex min-w-0 flex-1 flex-wrap items-baseline text-ink-900">
+                      <span className="min-w-0 break-words">
                         {names.length === 0 ? <span className="text-warn-600">Vacant</span> : names.map((m, j) => (
                           <span key={m!.id}>
                             {j > 0 && ', '}

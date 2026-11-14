@@ -72,14 +72,14 @@ export default function TeamHome() {
   return (
     <div className="min-h-[100dvh] bg-canvas">
       <header className="sticky top-0 z-20 border-b border-white/10 bg-tga-black text-white">
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-3 px-4 sm:px-6">
-          <Link to="/" aria-label="Home"><Logo light compact /></Link>
-          <div className="flex min-w-0 items-center gap-3">
+        <div className="mx-auto flex min-h-16 max-w-5xl items-center justify-between gap-3 px-4 py-2 sm:px-6">
+          <Link to="/" aria-label="Home" className="shrink-0"><Logo light compact /></Link>
+          <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
             <div className="min-w-0 text-right">
-              <div className="truncate text-sm font-medium">{fullName(me)}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-tga-gold">{me.role === 'leader' ? 'Leader' : 'Section coordinator'}</div>
+              <div className="break-words text-sm font-medium leading-snug">{fullName(me)}</div>
+              <div className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-tga-gold sm:text-[11px]">{me.role === 'leader' ? 'Leader' : 'Section coordinator'}</div>
             </div>
-            <Button size="icon-sm" variant="ghost" className="text-white/70 hover:bg-white/10 hover:text-white" onClick={() => { teamLogout(); navigate('/team/login') }} aria-label="Sign out"><LogOut className="h-4 w-4" /></Button>
+            <Button size="icon-sm" variant="ghost" className="shrink-0 text-white/70 hover:bg-white/10 hover:text-white" onClick={() => { teamLogout(); navigate('/team/login') }} aria-label="Sign out"><LogOut className="h-4 w-4" /></Button>
           </div>
         </div>
       </header>
@@ -87,29 +87,28 @@ export default function TeamHome() {
       <main className="mx-auto max-w-5xl space-y-6 px-4 pb-12 pt-6 sm:px-6">
         <div>
           <p className="text-sm text-ink-500">{event?.name}</p>
-          <h1 className="mt-1 text-[26px] font-semibold tracking-[-0.02em] text-ink-900 sm:text-[30px]">
+          <h1 className="mt-1 break-words text-[24px] font-semibold leading-tight tracking-[-0.02em] text-ink-900 sm:text-[30px]">
             {me.role === 'leader' ? `${scope.coordinators.length} coordinators, ${scope.zoneNames.size} zones` : zoneSummary([...coordZoneNames])}
           </h1>
           {myLeaders.length > 0 && (
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-ink-600">
-              <span className="inline-flex items-center gap-1 font-medium text-ink-500">
-                <Crown className="h-3.5 w-3.5 text-wine-600" />
-                {myLeaders.length > 1 ? 'Your leaders:' : 'Your leader:'}
-              </span>
-              {myLeaders.map((leader) => (
-                <span key={leader.id} className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-medium text-ink-900 ring-1 ring-line">
-                  <span>{fullName(leader)}</span>
-                  {leader.phone && (
-                    <>
-                      <span className="text-ink-300">·</span>
-                      <a className="inline-flex items-center gap-1 text-wine-600 hover:underline tabular" href={telHref(leader.phone)}>
-                        <Phone className="h-3 w-3" />
-                        {formatPhone(leader.phone)}
+            <div className="mt-3 space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-wine-700">
+                <Crown className="h-3.5 w-3.5 shrink-0 text-wine-600" />
+                <span>{myLeaders.length > 1 ? 'Your leaders' : 'Your leader'}</span>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                {myLeaders.map((leader) => (
+                  <div key={leader.id} className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl bg-white px-3.5 py-2.5 text-sm font-medium text-ink-900 ring-1 ring-line sm:inline-flex sm:rounded-full sm:py-1.5">
+                    <span className="break-words leading-snug">{fullName(leader)}</span>
+                    {leader.phone && (
+                      <a className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-wine-50/80 px-2.5 py-1 text-xs font-medium text-wine-700 ring-1 ring-wine-200/70 hover:bg-wine-100 tabular" href={telHref(leader.phone)}>
+                        <Phone className="h-3 w-3 shrink-0 text-wine-600" />
+                        <span>{formatPhone(leader.phone)}</span>
                       </a>
-                    </>
-                  )}
-                </span>
-              ))}
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -218,7 +217,7 @@ function CoordinatorView({ data, zoneNames, memberMap }: { data: EventData; zone
       <Stats rosters={rosters} />
       {rosters.length > 0 && (
         <section className="surface p-4" aria-label="All your sections">
-          <div className="mb-2.5 flex items-center justify-between gap-2">
+          <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-500">Your sections ({rosters.length})</h2>
             <span className="text-xs text-ink-400">Tap a section to jump to its details</span>
           </div>
@@ -230,15 +229,17 @@ function CoordinatorView({ data, zoneNames, memberMap }: { data: EventData; zone
                   key={r.zone.id}
                   onClick={() => jump(r.zone.id)}
                   className={cn(
-                    'inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-left text-xs ring-1 transition-colors',
+                    'inline-flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl px-3 py-2 text-left text-xs ring-1 transition-colors',
                     active ? 'bg-ink-950 text-white ring-ink-950' : 'bg-paper/70 text-ink-800 ring-line hover:bg-white hover:ring-line-strong',
                   )}
                 >
                   <span className="font-semibold">{r.zone.name}</span>
                   <span className={cn('tabular', active ? 'text-tga-gold' : 'text-ink-500')}>{r.assigned}/{r.required}</span>
                   {r.leaders.length > 0 && (
-                    <span className={cn('hidden items-center gap-1 sm:inline-flex', active ? 'text-white/75' : 'text-wine-700')}>
-                      · <Crown className="h-3 w-3" /> {r.leaders.map((l) => l.firstName).join(', ')}
+                    <span className={cn('inline-flex items-center gap-1 break-words', active ? 'text-white/80' : 'text-wine-700')}>
+                      <span>·</span>
+                      <Crown className="h-3 w-3 shrink-0" />
+                      <span>{r.leaders.map(fullName).join(', ')}</span>
                     </span>
                   )}
                 </button>
@@ -289,14 +290,22 @@ function CoordinatorRow({ c, data, memberMap, open, onToggle }: { c: Member; dat
   const cLeaders = useMemo(() => leadersForMember(c, [...memberMap.values()]), [c, memberMap])
   return (
     <li id={`co-${c.id}`} className="surface overflow-hidden">
-      <div className="flex items-center gap-3 px-4 py-3">
+      <div className="flex items-start gap-3 px-4 py-3.5 sm:items-center">
         <Avatar first={c.firstName} last={c.lastName} size="sm" />
         <button onClick={onToggle} aria-expanded={open} className="min-w-0 flex-1 text-left">
-          <div className="truncate font-medium text-ink-900">{fullName(c)}</div>
-          <div className="truncate text-xs text-ink-500">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="break-words font-medium leading-snug text-ink-900">{fullName(c)}</span>
+            <span className="rounded-full bg-paper px-2 py-0.5 text-[11px] font-semibold text-ink-700 ring-1 ring-line tabular sm:hidden">{assigned}/{required}</span>
+          </div>
+          <div className="mt-0.5 break-words text-xs leading-relaxed text-ink-500">
             {zoneSummary(c.coordinates)}
             {cLeaders.length > 0 && ` · Leader${cLeaders.length > 1 ? 's' : ''}: ${cLeaders.map(fullName).join(', ')}`}
           </div>
+          {away > 0 && (
+            <div className="mt-1 inline-flex items-center gap-1 text-xs text-bad-600 sm:hidden">
+              <CalendarX2 className="h-3 w-3 shrink-0" />{away} can’t make it
+            </div>
+          )}
         </button>
         <div className="hidden shrink-0 text-right text-xs sm:block">
           <div className="font-semibold text-ink-900 tabular">{assigned}/{required}</div>

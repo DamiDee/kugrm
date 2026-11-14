@@ -263,34 +263,36 @@ function Found({ view }: { view: AssignmentView }) {
           <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-xs font-medium text-ink-600 ring-1 ring-line tabular">{team.length} ushers</span>
         </div>
         {(leaders.length > 0 || coordinators.length > 0) && (
-          <div className="mb-3 space-y-2">
+          <div className="mb-3 space-y-2.5">
             {leaders.map((leader) => (
-              <div key={leader.id} className="flex items-center justify-between gap-3 rounded-2xl bg-wine-50/70 px-4 py-3 ring-1 ring-wine-200/80">
+              <div key={leader.id} className="flex flex-col gap-2.5 rounded-2xl bg-wine-50/70 px-4 py-3.5 ring-1 ring-wine-200/80 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                  <div className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-[0.1em] text-wine-700">
-                    <Crown className="h-3.5 w-3.5 text-wine-600" />
-                    {leaders.length > 1 ? 'Section leader' : 'Your leader'} · {current.zone.name}
+                  <div className="inline-flex flex-wrap items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-wine-700">
+                    <Crown className="h-3.5 w-3.5 shrink-0 text-wine-600" />
+                    <span>{leaders.length > 1 ? 'Section leader' : 'Your leader'} · {current.zone.name}</span>
                   </div>
-                  <div className="truncate font-medium text-ink-900">{fullName(leader)}</div>
+                  <div className="mt-0.5 break-words text-[15px] font-semibold leading-snug text-ink-900">{fullName(leader)}</div>
                 </div>
                 {leader.phone && (
-                  <a href={telHref(leader.phone)} className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-white px-3 text-[13px] font-medium text-ink-800 ring-1 ring-line hover:ring-line-strong">
-                    <Phone className="h-3.5 w-3.5 text-wine-500" /> {formatPhone(leader.phone)}
+                  <a href={telHref(leader.phone)} className="inline-flex h-10 w-fit shrink-0 items-center gap-2 rounded-full bg-white px-3.5 text-[13px] font-medium text-ink-800 ring-1 ring-line hover:ring-line-strong">
+                    <Phone className="h-3.5 w-3.5 shrink-0 text-wine-500" />
+                    <span className="tabular">{formatPhone(leader.phone)}</span>
                   </a>
                 )}
               </div>
             ))}
             {coordinators.map((coord) => (
-              <div key={coord.id} className="flex items-center justify-between gap-3 rounded-2xl bg-gold-100/60 px-4 py-3 ring-1 ring-gold-300/50">
+              <div key={coord.id} className="flex flex-col gap-2.5 rounded-2xl bg-gold-100/60 px-4 py-3.5 ring-1 ring-gold-300/50 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                  <div className="text-[11.5px] font-semibold uppercase tracking-[0.1em] text-gold-700">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-gold-700">
                     {coordinators.length > 1 ? 'Section coordinator' : 'Your coordinator'} · {current.zone.name}
                   </div>
-                  <div className="truncate font-medium text-ink-900">{fullName(coord)}</div>
+                  <div className="mt-0.5 break-words text-[15px] font-semibold leading-snug text-ink-900">{fullName(coord)}</div>
                 </div>
                 {coord.phone && (
-                  <a href={telHref(coord.phone)} className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-white px-3 text-[13px] font-medium text-ink-800 ring-1 ring-line hover:ring-line-strong">
-                    <Phone className="h-3.5 w-3.5 text-wine-500" /> {formatPhone(coord.phone)}
+                  <a href={telHref(coord.phone)} className="inline-flex h-10 w-fit shrink-0 items-center gap-2 rounded-full bg-white px-3.5 text-[13px] font-medium text-ink-800 ring-1 ring-line hover:ring-line-strong">
+                    <Phone className="h-3.5 w-3.5 shrink-0 text-wine-500" />
+                    <span className="tabular">{formatPhone(coord.phone)}</span>
                   </a>
                 )}
               </div>
@@ -349,34 +351,36 @@ function AwayPanel({ view }: { view: AssignmentView }) {
         action={<Button variant="primary" onClick={back}><Undo2 className="h-4 w-4" /> I can come after all</Button>}
       />
       {(leaders.length > 0 || coordinators.length > 0) && (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {leaders.map((leader) => (
-            <div key={leader.id} className="flex items-center justify-between gap-3 rounded-2xl bg-wine-50/70 px-4 py-3 ring-1 ring-wine-200/80">
+            <div key={leader.id} className="flex flex-col gap-2.5 rounded-2xl bg-wine-50/70 px-4 py-3.5 ring-1 ring-wine-200/80 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <div className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-[0.1em] text-wine-700">
-                  <Crown className="h-3.5 w-3.5 text-wine-600" />
-                  {leaders.length > 1 ? 'Section leader' : 'Your leader'} · {view.zone.name}
+                <div className="inline-flex flex-wrap items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-wine-700">
+                  <Crown className="h-3.5 w-3.5 shrink-0 text-wine-600" />
+                  <span>{leaders.length > 1 ? 'Section leader' : 'Your leader'} · {view.zone.name}</span>
                 </div>
-                <div className="truncate font-medium text-ink-900">{fullName(leader)}</div>
+                <div className="mt-0.5 break-words text-[15px] font-semibold leading-snug text-ink-900">{fullName(leader)}</div>
               </div>
               {leader.phone && (
-                <a href={telHref(leader.phone)} className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-white px-3 text-[13px] font-medium text-ink-800 ring-1 ring-line hover:ring-line-strong">
-                  <Phone className="h-3.5 w-3.5 text-wine-500" /> {formatPhone(leader.phone)}
+                <a href={telHref(leader.phone)} className="inline-flex h-10 w-fit shrink-0 items-center gap-2 rounded-full bg-white px-3.5 text-[13px] font-medium text-ink-800 ring-1 ring-line hover:ring-line-strong">
+                  <Phone className="h-3.5 w-3.5 shrink-0 text-wine-500" />
+                  <span className="tabular">{formatPhone(leader.phone)}</span>
                 </a>
               )}
             </div>
           ))}
           {coordinators.map((coord) => (
-            <div key={coord.id} className="flex items-center justify-between gap-3 rounded-2xl bg-gold-100/60 px-4 py-3 ring-1 ring-gold-300/50">
+            <div key={coord.id} className="flex flex-col gap-2.5 rounded-2xl bg-gold-100/60 px-4 py-3.5 ring-1 ring-gold-300/50 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <div className="text-[11.5px] font-semibold uppercase tracking-[0.1em] text-gold-700">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-gold-700">
                   {coordinators.length > 1 ? 'Section coordinator' : 'Your coordinator'} · {view.zone.name}
                 </div>
-                <div className="truncate font-medium text-ink-900">{fullName(coord)}</div>
+                <div className="mt-0.5 break-words text-[15px] font-semibold leading-snug text-ink-900">{fullName(coord)}</div>
               </div>
               {coord.phone && (
-                <a href={telHref(coord.phone)} className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-white px-3 text-[13px] font-medium text-ink-800 ring-1 ring-line hover:ring-line-strong">
-                  <Phone className="h-3.5 w-3.5 text-wine-500" /> {formatPhone(coord.phone)}
+                <a href={telHref(coord.phone)} className="inline-flex h-10 w-fit shrink-0 items-center gap-2 rounded-full bg-white px-3.5 text-[13px] font-medium text-ink-800 ring-1 ring-line hover:ring-line-strong">
+                  <Phone className="h-3.5 w-3.5 shrink-0 text-wine-500" />
+                  <span className="tabular">{formatPhone(coord.phone)}</span>
                 </a>
               )}
             </div>
@@ -438,14 +442,20 @@ function OtherEvents({ others }: { others: AssignmentView[] }) {
               <ul className="mt-3 divide-y divide-line rounded-2xl border border-line bg-white">
                 {list.length === 0 && <li className="px-5 py-6 text-center text-sm text-ink-500">Nothing here yet.</li>}
                 {list.map((o) => (
-                  <li key={o.assignment.id} className="flex items-center justify-between gap-4 px-5 py-4">
+                  <li key={o.assignment.id} className="flex flex-col gap-1.5 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                     <div className="min-w-0">
-                      <div className="truncate font-medium text-ink-900">{o.event.series ? eventLabel(o.event) : o.event.name}</div>
+                      <div className="break-words font-medium leading-snug text-ink-900">{o.event.series ? eventLabel(o.event) : o.event.name}</div>
                       <div className="text-[13px] text-ink-500">{formatShortDate(o.event.date)} · Report {formatTime(o.event.reportingTime)}</div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-sm font-semibold text-ink-900">{o.zone.name}</div>
-                      <div className="text-[13px] text-ink-500">{o.position.name}</div>
+                    <div className="sm:text-right">
+                      <div className="break-words text-sm font-semibold text-ink-900">{o.zone.name} · <span className="font-normal text-ink-600">{o.position.name}</span></div>
+                      {(o.leaders?.length || o.coordinators?.length) ? (
+                        <div className="break-words text-xs text-ink-500">
+                          {o.leaders?.length ? `Leader: ${o.leaders.map(fullName).join(', ')}` : ''}
+                          {o.leaders?.length && o.coordinators?.length ? ' · ' : ''}
+                          {o.coordinators?.length ? `Coord: ${o.coordinators.map(fullName).join(', ')}` : ''}
+                        </div>
+                      ) : null}
                     </div>
                   </li>
                 ))}

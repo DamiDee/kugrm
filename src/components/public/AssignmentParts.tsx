@@ -42,8 +42,8 @@ export function AssignmentCard({ view, onConfirm }: { view: AssignmentView; onCo
       className="relative overflow-hidden rounded-[26px] bg-ink-950 text-white shadow-float"
     >
       <div className="absolute inset-0 bg-[radial-gradient(60%_80%_at_100%_0%,rgba(147,48,78,.45),transparent_70%)]" />
-      <div className="relative p-6 sm:p-8">
-        <div className="flex items-center justify-between">
+      <div className="relative p-5 sm:p-8">
+        <div className="flex items-center justify-between gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gold-300">Your assignment</span>
           <StatusBadge status={assignment.status} className="bg-white/10 text-white ring-white/15" />
         </div>
@@ -51,17 +51,17 @@ export function AssignmentCard({ view, onConfirm }: { view: AssignmentView; onCo
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.12, duration: 0.45 }}
-          className={cn('mt-5 font-light uppercase leading-[.95] tracking-[-0.03em]', zone.name.length > 14 ? 'text-[40px] sm:text-[52px]' : 'text-[56px] sm:text-[76px]')}
+          className={cn('mt-4 break-words font-light uppercase leading-[.98] tracking-[-0.03em] sm:mt-5', zone.name.length > 14 ? 'text-[34px] sm:text-[52px]' : 'text-[44px] sm:text-[76px]')}
         >
           {zone.name}
         </motion.h2>
-        {note && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.18 }} className="mt-2 text-[15px] text-gold-300/90">{note}</motion.p>}
+        {note && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.18 }} className="mt-2 text-[14.5px] leading-relaxed text-gold-300/90 sm:text-[15px]">{note}</motion.p>}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.22 }} className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="h-px w-8 bg-gold-300/70" />
           <span className="text-sm text-white/55">Position</span>
-          <span className="text-xl font-medium tracking-tight">{position.name}</span>
-          <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-white/80 ring-1 ring-white/15">{DUTY_LABEL[dutyOf(position)]}</span>
-          {assignment.isTeamLead && <span className="inline-flex items-center gap-1 rounded-full bg-gold-300/15 px-2 py-0.5 text-xs text-gold-300"><Crown className="h-3 w-3" /> Team lead</span>}
+          <span className="text-lg font-medium tracking-tight sm:text-xl">{position.name}</span>
+          <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs text-white/80 ring-1 ring-white/15">{DUTY_LABEL[dutyOf(position)]}</span>
+          {assignment.isTeamLead && <span className="inline-flex items-center gap-1 rounded-full bg-gold-300/15 px-2.5 py-0.5 text-xs text-gold-300"><Crown className="h-3 w-3" /> Team lead</span>}
         </motion.div>
       </div>
       <dl className="relative grid grid-cols-2 border-t border-white/10 text-sm sm:grid-cols-4">
@@ -71,49 +71,55 @@ export function AssignmentCard({ view, onConfirm }: { view: AssignmentView; onCo
           [event.startTime ? 'Service starts' : 'Venue', event.startTime ? formatTime(event.startTime) : event.venue.split(',')[0]],
           [fourthLabel, fourthValue],
         ].map(([k, v], i) => (
-          <div key={k} className={cn('px-6 py-4 sm:px-8', i % 2 === 1 && 'border-l border-white/10', i >= 2 && 'border-t border-white/10 sm:border-t-0', i >= 1 && 'sm:border-l')}>
+          <div key={k} className={cn('px-4 py-3.5 sm:px-7 sm:py-4', i % 2 === 1 && 'border-l border-white/10', i >= 2 && 'border-t border-white/10 sm:border-t-0', i >= 1 && 'sm:border-l')}>
             <dt className="text-xs text-white/45">{k}</dt>
-            <dd className="mt-1 font-medium text-white">{v}</dd>
+            <dd className="mt-1 break-words font-medium leading-snug text-white">{v}</dd>
           </div>
         ))}
       </dl>
       {(leaders.length > 0 || coordinators.length > 0) && (
-        <div className="relative flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/10 bg-white/[0.03] px-6 py-3.5 text-xs sm:px-8">
+        <div className="relative space-y-2.5 border-t border-white/10 bg-white/[0.04] px-5 py-4 text-xs sm:px-8">
           {leaders.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-semibold uppercase tracking-[0.12em] text-gold-300">
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gold-300">
                 {leaders.length > 1 ? 'Section leaders' : 'Section leader'}
-              </span>
-              {leaders.map((l) => (
-                <span key={l.id} className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-white ring-1 ring-white/15">
-                  <Crown className="h-3 w-3 text-gold-300" />
-                  <span className="font-medium">{fullName(l)}</span>
-                  {l.phone && (
-                    <a href={telHref(l.phone)} className="ml-1 inline-flex items-center gap-1 text-gold-300 hover:underline" aria-label={`Call ${fullName(l)}`}>
-                      <Phone className="h-3 w-3" />
-                      <span className="tabular">{formatPhone(l.phone)}</span>
-                    </a>
-                  )}
-                </span>
-              ))}
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                {leaders.map((l) => (
+                  <div key={l.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/10 px-3 py-2 text-white ring-1 ring-white/15 sm:inline-flex sm:rounded-full sm:py-1.5">
+                    <span className="inline-flex items-center gap-1.5 break-words text-[13px] font-medium leading-snug">
+                      <Crown className="h-3.5 w-3.5 shrink-0 text-gold-300" />
+                      <span>{fullName(l)}</span>
+                    </span>
+                    {l.phone && (
+                      <a href={telHref(l.phone)} className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-gold-300 ring-1 ring-white/15 hover:bg-white/20 sm:bg-transparent sm:px-1 sm:py-0 sm:ring-0" aria-label={`Call ${fullName(l)}`}>
+                        <Phone className="h-3 w-3 shrink-0" />
+                        <span className="tabular">{formatPhone(l.phone)}</span>
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           {coordinators.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-semibold uppercase tracking-[0.12em] text-white/55">
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/55">
                 {coordinators.length > 1 ? 'Coordinators' : 'Coordinator'}
-              </span>
-              {coordinators.map((c) => (
-                <span key={c.id} className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-white ring-1 ring-white/15">
-                  <span className="font-medium">{fullName(c)}</span>
-                  {c.phone && (
-                    <a href={telHref(c.phone)} className="ml-1 inline-flex items-center gap-1 text-gold-300 hover:underline" aria-label={`Call ${fullName(c)}`}>
-                      <Phone className="h-3 w-3" />
-                      <span className="tabular">{formatPhone(c.phone)}</span>
-                    </a>
-                  )}
-                </span>
-              ))}
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                {coordinators.map((c) => (
+                  <div key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/10 px-3 py-2 text-white ring-1 ring-white/15 sm:inline-flex sm:rounded-full sm:py-1.5">
+                    <span className="break-words text-[13px] font-medium leading-snug">{fullName(c)}</span>
+                    {c.phone && (
+                      <a href={telHref(c.phone)} className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-gold-300 ring-1 ring-white/15 hover:bg-white/20 sm:bg-transparent sm:px-1 sm:py-0 sm:ring-0" aria-label={`Call ${fullName(c)}`}>
+                        <Phone className="h-3 w-3 shrink-0" />
+                        <span className="tabular">{formatPhone(c.phone)}</span>
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -150,22 +156,21 @@ export function TeamMemberRow({ t, showPhone }: { t: Teammate; showPhone: boolea
     setTimeout(() => setCopied(false), 1400)
   }
   return (
-    <li className={cn('group flex items-center gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-paper', t.isYou && 'bg-wine-50/60 hover:bg-wine-50')}>
+    <li className={cn('group flex items-start gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-paper sm:items-center', t.isYou && 'bg-wine-50/60 hover:bg-wine-50')}>
       <Avatar first={t.member.firstName} last={t.member.lastName} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="truncate font-medium text-ink-900">{fullName(t.member)}</span>
+          <span className="break-words font-medium leading-snug text-ink-900">{fullName(t.member)}</span>
           {t.isYou && <span className="rounded-full bg-wine-600 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-white">You</span>}
           {t.isTeamLead && <span className="inline-flex items-center gap-1 rounded-full bg-gold-100 px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-gold-700 ring-1 ring-gold-300/60"><Crown className="h-3 w-3" />Lead</span>}
         </div>
-        <div className="mt-0.5 text-[13px] text-ink-500">{t.position.name}</div>
+        <div className="mt-0.5 break-words text-[13px] text-ink-500">{t.position.name}</div>
       </div>
-      {showPhone && !t.isYou && (
-        <div className="flex items-center gap-1">
-          <a href={telHref(t.member.phone)} className="inline-flex h-10 items-center gap-2 rounded-full px-3 text-[13px] font-medium text-ink-700 tabular ring-1 ring-line transition-colors hover:bg-white hover:ring-line-strong" aria-label={`Call ${fullName(t.member)}`}>
-            <Phone className="h-3.5 w-3.5 text-wine-500" />
-            <span className="hidden sm:inline">{formatPhone(t.member.phone)}</span>
-            <span className="sm:hidden">Call</span>
+      {showPhone && !t.isYou && t.member.phone && (
+        <div className="flex shrink-0 items-center gap-1">
+          <a href={telHref(t.member.phone)} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-white px-3 text-[12.5px] font-medium text-ink-700 tabular ring-1 ring-line transition-colors hover:ring-line-strong sm:h-10 sm:text-[13px]" aria-label={`Call ${fullName(t.member)}`}>
+            <Phone className="h-3.5 w-3.5 shrink-0 text-wine-500" />
+            <span>{formatPhone(t.member.phone)}</span>
           </a>
           <button onClick={copy} className="relative hidden h-10 w-10 items-center justify-center rounded-full text-ink-400 hover:bg-white hover:text-ink-700 sm:flex" aria-label="Copy phone number">
             <AnimatePresence mode="wait" initial={false}>

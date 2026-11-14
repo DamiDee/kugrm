@@ -36,11 +36,11 @@ export function Absences({ data, members, onCover, zoneNames, className, limit =
       ) : (
         <ul className="px-2 pb-2">
           {list.slice(0, limit).map(({ assignment, member, zone, position, covered }) => (
-            <li key={assignment.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-paper">
+            <li key={assignment.id} className="flex items-start gap-3 rounded-xl px-3 py-2.5 hover:bg-paper sm:items-center">
               <Avatar first={member.firstName} last={member.lastName} size="sm" />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-ink-900">{fullName(member)}</div>
-                <div className="truncate text-xs text-ink-500">{zone.name} · {position.name}{assignment.unavailableReason ? ` · ${assignment.unavailableReason}` : ''}</div>
+                <div className="break-words text-sm font-medium leading-snug text-ink-900">{fullName(member)}</div>
+                <div className="mt-0.5 break-words text-xs leading-relaxed text-ink-500">{zone.name} · {position.name}{assignment.unavailableReason ? ` · ${assignment.unavailableReason}` : ''}</div>
               </div>
               {covered ? (
                 <span className="inline-flex items-center gap-1 text-xs font-medium text-ok-600"><CheckCircle2 className="h-3.5 w-3.5" /> Covered</span>

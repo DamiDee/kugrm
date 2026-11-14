@@ -69,8 +69,8 @@ export function ZonePanel({ zoneId, data, onAssign, onOpenMember, className }: {
                       return (
                         <motion.li key={a.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, height: 0 }} className="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-paper">
                           <Avatar first={m.firstName} last={m.lastName} size="xs" />
-                          <button onClick={() => onOpenMember?.(m.id)} className="min-w-0 flex-1 truncate text-left text-sm text-ink-800 hover:text-wine-600">{fullName(m)}</button>
-                          {a.isTeamLead && <Crown className="h-3.5 w-3.5 text-gold-600" aria-label="Team lead" />}
+                          <button onClick={() => onOpenMember?.(m.id)} className="min-w-0 flex-1 break-words text-left text-sm leading-snug text-ink-800 hover:text-wine-600">{fullName(m)}</button>
+                          {a.isTeamLead && <Crown className="h-3.5 w-3.5 shrink-0 text-gold-600" aria-label="Team lead" />}
                           <span className="hidden text-xs text-ink-400 tabular sm:inline">{formatPhone(m.phone)}</span>
                           <button onClick={() => setConfirmId(a.id)} className="rounded p-1 text-ink-400 opacity-0 transition-opacity hover:bg-bad-50 hover:text-bad-500 focus:opacity-100 group-hover:opacity-100" aria-label={`Remove ${fullName(m)}`}><X className="h-3.5 w-3.5" /></button>
                         </motion.li>
