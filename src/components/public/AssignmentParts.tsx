@@ -13,6 +13,26 @@ export function AssignmentCard({ view, onConfirm }: { view: AssignmentView; onCo
   const { event, zone, position, teamLead, assignment } = view
   const lead = leadLabel(zone)
   const note = zoneNote(zone)
+  const leaders = view.leaders?.length ? view.leaders : view.leader ? [view.leader] : []
+  const coordinators = view.coordinators?.length ? view.coordinators : view.coordinator ? [view.coordinator] : []
+  const fourthLabel = teamLead
+    ? lead
+    : leaders.length > 1
+      ? 'Section leaders'
+      : leaders.length === 1
+        ? 'Section leader'
+        : coordinators.length > 1
+          ? 'Coordinators'
+          : coordinators.length === 1
+            ? 'Coordinator'
+            : lead
+  const fourthValue = teamLead
+    ? fullName(teamLead)
+    : leaders.length
+      ? leaders.map(fullName).join(', ')
+      : coordinators.length
+        ? coordinators.map(fullName).join(', ')
+        : 'To be announced'
   return (
     <motion.section
       aria-label="Your assignment"
@@ -49,7 +69,7 @@ export function AssignmentCard({ view, onConfirm }: { view: AssignmentView; onCo
           ['Session', sessionShort(event)],
           ['Report by', formatTime(event.reportingTime)],
           [event.startTime ? 'Service starts' : 'Venue', event.startTime ? formatTime(event.startTime) : event.venue.split(',')[0]],
-          [lead, teamLead ? fullName(teamLead) : 'To be announced'],
+          [fourthLabel, fourthValue],
         ].map(([k, v], i) => (
           <div key={k} className={cn('px-6 py-4 sm:px-8', i % 2 === 1 && 'border-l border-white/10', i >= 2 && 'border-t border-white/10 sm:border-t-0', i >= 1 && 'sm:border-l')}>
             <dt className="text-xs text-white/45">{k}</dt>
@@ -57,6 +77,47 @@ export function AssignmentCard({ view, onConfirm }: { view: AssignmentView; onCo
           </div>
         ))}
       </dl>
+      {(leaders.length > 0 || coordinators.length > 0) && (
+        <div className="relative flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/10 bg-white/[0.03] px-6 py-3.5 text-xs sm:px-8">
+          {leaders.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold uppercase tracking-[0.12em] text-gold-300">
+                {leaders.length > 1 ? 'Section leaders' : 'Section leader'}
+              </span>
+              {leaders.map((l) => (
+                <span key={l.id} className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-white ring-1 ring-white/15">
+                  <Crown className="h-3 w-3 text-gold-300" />
+                  <span className="font-medium">{fullName(l)}</span>
+                  {l.phone && (
+                    <a href={telHref(l.phone)} className="ml-1 inline-flex items-center gap-1 text-gold-300 hover:underline" aria-label={`Call ${fullName(l)}`}>
+                      <Phone className="h-3 w-3" />
+                      <span className="tabular">{formatPhone(l.phone)}</span>
+                    </a>
+                  )}
+                </span>
+              ))}
+            </div>
+          )}
+          {coordinators.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold uppercase tracking-[0.12em] text-white/55">
+                {coordinators.length > 1 ? 'Coordinators' : 'Coordinator'}
+              </span>
+              {coordinators.map((c) => (
+                <span key={c.id} className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-white ring-1 ring-white/15">
+                  <span className="font-medium">{fullName(c)}</span>
+                  {c.phone && (
+                    <a href={telHref(c.phone)} className="ml-1 inline-flex items-center gap-1 text-gold-300 hover:underline" aria-label={`Call ${fullName(c)}`}>
+                      <Phone className="h-3 w-3" />
+                      <span className="tabular">{formatPhone(c.phone)}</span>
+                    </a>
+                  )}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {onConfirm && assignment.status === 'assigned' && (
         <div className="relative flex flex-col items-start justify-between gap-3 border-t border-white/10 px-6 py-4 sm:flex-row sm:items-center sm:px-8">
           <p className="text-sm text-white/60">Let your {lead.toLowerCase()} know you’ll be there.</p>

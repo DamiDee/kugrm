@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { CalendarX2, ChevronDown, LogOut, Phone, Users } from 'lucide-react'
+import { CalendarX2, ChevronDown, Crown, LogOut, Phone, Users } from 'lucide-react'
 import { useStore } from '@/store/useStore'
 import { LIVE, tokens, type ApiError } from '@/lib/api'
 import { loadTeam } from '@/lib/live'
-import { positionsOf, sessionsOf, spotOccupants, teamScope, uncoveredSpots, useEventData, useMemberMap, type EventData } from '@/lib/selectors'
+import { leadersForMember, leadersForZone, positionsOf, sessionsOf, spotOccupants, teamScope, uncoveredSpots, useEventData, useMemberMap, type EventData } from '@/lib/selectors'
 import type { Member } from '@/data/types'
 import { cn, formatDate, formatPhone, formatTime, fullName, sessionLine, telHref } from '@/lib/utils'
 import { Logo } from '@/components/ui/misc'
@@ -12,7 +12,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { VenueMap } from '@/components/venue/VenueMap'
 import { Absences } from '@/components/admin/Absences'
-import { ZoneRosterCard, useZoneRosters, zoneSummary } from '@/components/team/TeamParts'
+import { ZoneRosterCard, useZoneRosters, zoneSummary, type ZoneRoster } from '@/components/team/TeamParts'
 
 /**
  * What a section coordinator or leader sees after signing in: their sections
@@ -40,10 +40,34 @@ export default function TeamHome() {
   const memberMap = useMemberMap()
   const scope = useMemo(() => (me ? teamScope(me, members) : { coordinators: [], zoneNames: new Set<string>() }), [me, members])
 
+  const myLeaders = useMemo(() => {
+    if (!me || me.role !== 'coordinator') return []
+    const direct = leadersForMember(me, members)
+    if (direct.length) return direct
+    const seen = new Set<string>()
+    const out: Member[] = []
+    for (const zName of me.coordinates ?? []) {
+      for (const l of leadersForZone(members, zName)) {
+        if (!seen.has(l.id)) {
+          seen.add(l.id)
+          out.push(l)
+        }
+      }
+    }
+    return out
+  }, [me, members])
+
+  const coordZoneNames = useMemo(() => {
+    const names = new Set<string>(me?.coordinates ?? [])
+    if (LIVE && me?.role === 'coordinator') {
+      data.zones.forEach((z) => names.add(z.name))
+    }
+    return names
+  }, [me, data.zones])
+
   if (LIVE && tokens.get('team') && !me && !loadFailed) return <div role="status" className="grid min-h-[100dvh] place-items-center bg-canvas text-sm text-ink-500">Loading your team…</div>
   if (!me || (me.role !== 'coordinator' && me.role !== 'leader')) return <Navigate to="/team/login" replace />
   const event = data.event
-  const leader = me.role === 'coordinator' && me.leaderId ? memberMap.get(me.leaderId) : undefined
 
   return (
     <div className="min-h-[100dvh] bg-canvas">
@@ -64,10 +88,29 @@ export default function TeamHome() {
         <div>
           <p className="text-sm text-ink-500">{event?.name}</p>
           <h1 className="mt-1 text-[26px] font-semibold tracking-[-0.02em] text-ink-900 sm:text-[30px]">
-            {me.role === 'leader' ? `${scope.coordinators.length} coordinators, ${scope.zoneNames.size} zones` : zoneSummary(me.coordinates)}
+            {me.role === 'leader' ? `${scope.coordinators.length} coordinators, ${scope.zoneNames.size} zones` : zoneSummary([...coordZoneNames])}
           </h1>
-          {leader && (
-            <p className="mt-1 text-sm text-ink-500">Your leader: <span className="font-medium text-ink-800">{fullName(leader)}</span> · <a className="text-wine-600 hover:underline" href={telHref(leader.phone)}>{formatPhone(leader.phone)}</a></p>
+          {myLeaders.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-ink-600">
+              <span className="inline-flex items-center gap-1 font-medium text-ink-500">
+                <Crown className="h-3.5 w-3.5 text-wine-600" />
+                {myLeaders.length > 1 ? 'Your leaders:' : 'Your leader:'}
+              </span>
+              {myLeaders.map((leader) => (
+                <span key={leader.id} className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-medium text-ink-900 ring-1 ring-line">
+                  <span>{fullName(leader)}</span>
+                  {leader.phone && (
+                    <>
+                      <span className="text-ink-300">·</span>
+                      <a className="inline-flex items-center gap-1 text-wine-600 hover:underline tabular" href={telHref(leader.phone)}>
+                        <Phone className="h-3 w-3" />
+                        {formatPhone(leader.phone)}
+                      </a>
+                    </>
+                  )}
+                </span>
+              ))}
+            </div>
           )}
         </div>
 
@@ -102,23 +145,21 @@ export default function TeamHome() {
         ) : me.role === 'leader' ? (
           <LeaderView data={data} coordinators={scope.coordinators} memberMap={memberMap} />
         ) : (
-          <CoordinatorView data={data} zoneNames={new Set(me.coordinates ?? [])} memberMap={memberMap} />
+          <CoordinatorView data={data} zoneNames={coordZoneNames} memberMap={memberMap} />
         )}
       </main>
     </div>
   )
 }
 
-function Stats({ data, zoneNames }: { data: EventData; zoneNames: Set<string> }) {
-  const zones = data.zoneStats.filter((z) => zoneNames.has(z.zone.name))
-  const assigned = zones.reduce((n, z) => n + z.assigned, 0)
-  const required = zones.reduce((n, z) => n + z.required, 0)
-  const ids = new Set(zones.map((z) => z.zone.id))
-  const confirmed = data.assignments.filter((a) => ids.has(a.zoneId) && a.status === 'confirmed').length
-  const away = data.unavailable.filter((a) => ids.has(a.zoneId)).length
+function Stats({ rosters }: { rosters: ZoneRoster[] }) {
+  const assigned = rosters.reduce((n, r) => n + r.assigned, 0)
+  const required = rosters.reduce((n, r) => n + r.required, 0)
+  const confirmed = rosters.reduce((n, r) => n + r.confirmed, 0)
+  const away = rosters.reduce((n, r) => n + r.away, 0)
   const items: [string, string, string?][] = [
-    ['Ushers in place', `${assigned}`, `of ${required} needed`],
-    ['Confirmed', `${confirmed}`, `${assigned - confirmed} not yet`],
+    ['Ushers in place', `${assigned}`, `of ${required} needed (${rosters.length} section${rosters.length === 1 ? '' : 's'})`],
+    ['Confirmed', `${confirmed}`, `${Math.max(0, assigned - confirmed)} not yet`],
     ['Open places', `${Math.max(0, required - assigned)}`],
     ['Can’t make it', `${away}`],
   ]
@@ -135,11 +176,25 @@ function Stats({ data, zoneNames }: { data: EventData; zoneNames: Set<string> })
   )
 }
 
-function TeamMap({ data, zoneNames, memberMap, onSelect }: { data: EventData; zoneNames: Set<string>; memberMap: Map<string, Member>; onSelect?: (zoneId: string) => void }) {
-  const zones = data.zones.filter((z) => zoneNames.has(z.name))
+function TeamMap({ data, rosters, memberMap, onSelect }: { data: EventData; rosters: ZoneRoster[]; memberMap: Map<string, Member>; onSelect?: (zoneId: string) => void }) {
+  const zones = rosters.map((r) => r.zone)
   const ids = zones.map((z) => z.id)
   const idSet = new Set(ids)
-  const info = Object.fromEntries(data.zoneStats.filter((z) => idSet.has(z.zone.id)).map((z) => [z.zone.id, { assigned: z.assigned, required: z.required, coverage: z.coverage }]))
+  const info = Object.fromEntries(
+    rosters.map((r) => {
+      const coverage = r.required ? Math.min(100, Math.round((r.assigned / r.required) * 100)) : r.assigned ? 100 : 0
+      return [
+        r.zone.id,
+        {
+          assigned: r.assigned,
+          required: r.required,
+          coverage,
+          leaders: r.leaders.map(fullName),
+          coordinators: r.coordinators.map(fullName),
+        },
+      ]
+    }),
+  )
   const positions = positionsOf(data).filter((p) => idSet.has(p.zoneId))
   const occupants = spotOccupants(data, memberMap, ids)
   const uncovered = Object.fromEntries(Object.entries(uncoveredSpots(data, memberMap)).filter(([pid]) => positions.some((p) => p.id === pid)))
@@ -160,8 +215,39 @@ function CoordinatorView({ data, zoneNames, memberMap }: { data: EventData; zone
   if (zoneNames.size === 0) return <p className="surface p-6 text-sm text-ink-500">No zones have been given to you yet. The admin team sets this on the Team page.</p>
   return (
     <>
-      <Stats data={data} zoneNames={zoneNames} />
-      <TeamMap data={data} zoneNames={zoneNames} memberMap={memberMap} onSelect={jump} />
+      <Stats rosters={rosters} />
+      {rosters.length > 0 && (
+        <section className="surface p-4" aria-label="All your sections">
+          <div className="mb-2.5 flex items-center justify-between gap-2">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-500">Your sections ({rosters.length})</h2>
+            <span className="text-xs text-ink-400">Tap a section to jump to its details</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {rosters.map((r) => {
+              const active = focus === r.zone.id
+              return (
+                <button
+                  key={r.zone.id}
+                  onClick={() => jump(r.zone.id)}
+                  className={cn(
+                    'inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-left text-xs ring-1 transition-colors',
+                    active ? 'bg-ink-950 text-white ring-ink-950' : 'bg-paper/70 text-ink-800 ring-line hover:bg-white hover:ring-line-strong',
+                  )}
+                >
+                  <span className="font-semibold">{r.zone.name}</span>
+                  <span className={cn('tabular', active ? 'text-tga-gold' : 'text-ink-500')}>{r.assigned}/{r.required}</span>
+                  {r.leaders.length > 0 && (
+                    <span className={cn('hidden items-center gap-1 sm:inline-flex', active ? 'text-white/75' : 'text-wine-700')}>
+                      · <Crown className="h-3 w-3" /> {r.leaders.map((l) => l.firstName).join(', ')}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </section>
+      )}
+      <TeamMap data={data} rosters={rosters} memberMap={memberMap} onSelect={jump} />
       <Absences data={data} members={memberMap} zoneNames={zoneNames} limit={20} />
       <div className="grid gap-4 md:grid-cols-2">
         {rosters.map((r) => <ZoneRosterCard key={r.zone.id} id={`zr-${r.zone.id}`} r={r} highlight={focus === r.zone.id} />)}
@@ -172,13 +258,14 @@ function CoordinatorView({ data, zoneNames, memberMap }: { data: EventData; zone
 
 function LeaderView({ data, coordinators, memberMap }: { data: EventData; coordinators: Member[]; memberMap: Map<string, Member> }) {
   const all = useMemo(() => new Set(coordinators.flatMap((c) => c.coordinates ?? [])), [coordinators])
+  const allRosters = useZoneRosters(data, all, memberMap)
   const [open, setOpen] = useState<string | null>(null)
   if (coordinators.length === 0) return <p className="surface p-6 text-sm text-ink-500">No coordinators report to you yet. The admin team sets this on the Team page.</p>
   return (
     <>
-      <Stats data={data} zoneNames={all} />
-      <TeamMap data={data} zoneNames={all} memberMap={memberMap} onSelect={(zoneId) => {
-        const name = data.zoneById.get(zoneId)?.name
+      <Stats rosters={allRosters} />
+      <TeamMap data={data} rosters={allRosters} memberMap={memberMap} onSelect={(zoneId) => {
+        const name = allRosters.find((r) => r.zone.id === zoneId)?.zone.name ?? data.zoneById.get(zoneId)?.name
         const c = coordinators.find((x) => name && x.coordinates?.includes(name))
         if (c) { setOpen(c.id); setTimeout(() => document.getElementById(`co-${c.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60) }
       }} />
@@ -199,13 +286,17 @@ function CoordinatorRow({ c, data, memberMap, open, onToggle }: { c: Member; dat
   const assigned = rosters.reduce((n, r) => n + r.assigned, 0)
   const required = rosters.reduce((n, r) => n + r.required, 0)
   const away = rosters.reduce((n, r) => n + r.away, 0)
+  const cLeaders = useMemo(() => leadersForMember(c, [...memberMap.values()]), [c, memberMap])
   return (
     <li id={`co-${c.id}`} className="surface overflow-hidden">
       <div className="flex items-center gap-3 px-4 py-3">
         <Avatar first={c.firstName} last={c.lastName} size="sm" />
         <button onClick={onToggle} aria-expanded={open} className="min-w-0 flex-1 text-left">
           <div className="truncate font-medium text-ink-900">{fullName(c)}</div>
-          <div className="truncate text-xs text-ink-500">{zoneSummary(c.coordinates)}</div>
+          <div className="truncate text-xs text-ink-500">
+            {zoneSummary(c.coordinates)}
+            {cLeaders.length > 0 && ` · Leader${cLeaders.length > 1 ? 's' : ''}: ${cLeaders.map(fullName).join(', ')}`}
+          </div>
         </button>
         <div className="hidden shrink-0 text-right text-xs sm:block">
           <div className="font-semibold text-ink-900 tabular">{assigned}/{required}</div>

@@ -7,7 +7,7 @@ import { positionsOf, sessionsOf, spotOccupants, uncoveredSpots, useEventData, u
 import { DUTIES, DUTY_LABEL, dutyOf } from '@/data/duties'
 import { Absences } from '@/components/admin/Absences'
 import { useFirstLoad } from '@/lib/hooks'
-import { cn, eventLabel, formatDate, formatTime, greeting, sessionLine, sessionOrder, timeAgo } from '@/lib/utils'
+import { cn, eventLabel, formatDate, formatTime, fullName, greeting, sessionLine, sessionOrder, timeAgo } from '@/lib/utils'
 import { AnimatedNumber, EmptyState, MetricCard, ProgressBar } from '@/components/ui/misc'
 import { Button } from '@/components/ui/Button'
 import { StatusBadge } from '@/components/ui/Badge'
@@ -31,7 +31,7 @@ export default function Overview() {
 
   if (!event) return <EmptyState icon={<CalendarDays className="h-5 w-5" />} title="No events yet" description="Create your first event to begin building a roster." action={<Button variant="primary" onClick={() => navigate('/admin/events?new=1')}><Plus className="h-4 w-4" /> Create Event</Button>} />
 
-  const info = Object.fromEntries(zoneStats.map((z) => [z.zone.id, { assigned: z.assigned, required: z.required, coverage: z.coverage }]))
+  const info = Object.fromEntries(zoneStats.map((z) => [z.zone.id, { assigned: z.assigned, required: z.required, coverage: z.coverage, leaders: z.leaders.map(fullName), coordinators: z.coordinators.map(fullName) }]))
   const aisles = zoneStats.filter((z) => z.zone.kind === 'aisle')
   const areas = zoneStats.filter((z) => z.zone.kind !== 'aisle').sort((a, b) => a.coverage - b.coverage)
 

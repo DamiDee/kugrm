@@ -10,6 +10,8 @@ export interface ZoneStat {
   required: number
   coverage: number // 0-100, capped
   lead?: Member
+  coordinators: Member[]
+  leaders: Member[]
 }
 
 export interface EventData {
@@ -62,10 +64,14 @@ export function computeEventData(
     const list = byZone.get(zone.id) ?? []
     const required = positions.reduce((n, p) => n + (p.required ?? 0), 0)
     const leadA = list.find((a) => a.isTeamLead)
+    const coordinators = coordinatorsFor(s.members, zone.name)
+    const leaders = leadersForZone(s.members, zone.name)
     return {
       zone, positions, assigned: list.length, required,
       coverage: required ? Math.min(100, Math.round((list.length / required) * 100)) : list.length ? 100 : 0,
       lead: leadA ? memberById.get(leadA.memberId) : undefined,
+      coordinators,
+      leaders,
     }
   })
   const assigned = byMember.size
@@ -111,6 +117,12 @@ export interface AssignmentView {
   teammates: Teammate[]
   /** the coordinator over this zone, if one is set */
   coordinator?: Member
+  /** all coordinators overseeing this zone */
+  coordinators?: Member[]
+  /** primary leader overseeing this zone */
+  leader?: Member
+  /** all leaders overseeing this zone (via its coordinators or direct) */
+  leaders?: Member[]
 }
 
 /** One session of the series the usher is looking at. */
@@ -124,9 +136,52 @@ export type LookupResult =
   | { kind: 'not-found'; phone: string }
   | { kind: 'member'; member: Member; series?: string; sessions: SessionEntry[]; others: AssignmentView[] }
 
+/** All coordinators who oversee a zone, by zone name. */
+export function coordinatorsFor(members: Member[], zoneName: string): Member[] {
+  return members.filter((m) => m.role === 'coordinator' && m.coordinates?.includes(zoneName))
+}
+
 /** The coordinator who oversees a zone, by zone name. */
 export function coordinatorFor(members: Member[], zoneName: string) {
-  return members.find((m) => m.role === 'coordinator' && m.coordinates?.includes(zoneName))
+  return coordinatorsFor(members, zoneName)[0]
+}
+
+/** Resolves all leader members attached to a coordinator or member. */
+export function leadersForMember(member: Member | undefined, members: Member[]): Member[] {
+  if (!member) return []
+  const ids = leaderIdsOf(member)
+  if (!ids.length) return []
+  const byId = new Map(members.map((m) => [m.id, m]))
+  const out: Member[] = []
+  const seen = new Set<string>()
+  for (const id of ids) {
+    const l = byId.get(id)
+    if (l && !seen.has(l.id)) {
+      seen.add(l.id)
+      out.push(l)
+    }
+  }
+  return out
+}
+
+/** Resolves all unique leaders attached to a section/zone (via its coordinators or direct). */
+export function leadersForZone(members: Member[], zoneName: string): Member[] {
+  const byId = new Map(members.map((m) => [m.id, m]))
+  const seen = new Set<string>()
+  const out: Member[] = []
+  const add = (m: Member | undefined) => {
+    if (m && !seen.has(m.id)) {
+      seen.add(m.id)
+      out.push(m)
+    }
+  }
+  for (const c of coordinatorsFor(members, zoneName)) {
+    for (const id of leaderIdsOf(c)) add(byId.get(id))
+  }
+  for (const m of members) {
+    if (m.role === 'leader' && m.coordinates?.includes(zoneName)) add(m)
+  }
+  return out
 }
 
 /** The sessions of the event's series in service order, or just the event. */
@@ -154,7 +209,22 @@ export function lookupByPhone(phone: string): LookupResult {
       .map((x) => ({ member: memberById.get(x.memberId)!, position: posOrder.get(x.positionId)!, isTeamLead: x.isTeamLead, isYou: x.memberId === member.id }))
       .filter((t) => t.member && t.position)
       .sort((a, b) => Number(b.isTeamLead) - Number(a.isTeamLead) || Number(b.isYou) - Number(a.isYou) || a.position.order - b.position.order || a.member.firstName.localeCompare(b.member.firstName))
-    return { event, assignment: a, zone, position, teamLead: lead ? memberById.get(lead.memberId) : undefined, teammates, coordinator: coordinatorFor(s.members, zone.name) }
+    const coordinators = coordinatorsFor(s.members, zone.name)
+    const zoneLeaders = leadersForZone(s.members, zone.name)
+    const memberLeaders = leadersForMember(member, s.members)
+    const leaders = [...zoneLeaders, ...memberLeaders.filter((l) => !zoneLeaders.some((z) => z.id === l.id))]
+    return {
+      event,
+      assignment: a,
+      zone,
+      position,
+      teamLead: lead ? memberById.get(lead.memberId) : undefined,
+      teammates,
+      coordinator: coordinators[0],
+      coordinators,
+      leader: leaders[0],
+      leaders,
+    }
   }
 
   const mine = s.assignments.filter((a) => a.memberId === member.id)

@@ -1,10 +1,10 @@
 import { useMemo } from 'react'
 import { CalendarX2, CheckCircle2, Crown, Phone } from 'lucide-react'
-import type { Member, Position, Zone } from '@/data/types'
-import type { EventData } from '@/lib/selectors'
+import type { Member, Position, Zone, ZoneKind } from '@/data/types'
+import { coordinatorsFor, leadersForZone, type EventData } from '@/lib/selectors'
 import { cn, formatPhone, fullName, telHref } from '@/lib/utils'
 import { DUTY_LABEL, dutyOf } from '@/data/duties'
-import { zoneNote } from '@/data/venue'
+import { SPOTS, hasSpots, sectionOfRef, zoneNote, zoneRef } from '@/data/venue'
 
 /** "Sections 40–43, Aisle 5, Door X3" from a list of zone names. */
 export function zoneSummary(names: string[] = []) {
@@ -21,19 +21,65 @@ export function zoneSummary(names: string[] = []) {
   return [...parts, ...rest].join(' · ') || 'No zones yet'
 }
 
+export function inferZoneKind(name: string): ZoneKind {
+  if (/^sec(?:tion)?\.?\s*\d+$/i.test(name.trim())) return 'section'
+  if (/^aisle\s*\d+$/i.test(name.trim())) return 'aisle'
+  if (/^(?:door\s*)?[DXM]\d\b/i.test(name.trim())) return 'door'
+  return 'area'
+}
+
 export interface ZoneRoster {
   zone: Zone
   rows: { position: Position; member?: Member; status?: string; isLead?: boolean; reason?: string; away?: Member }[]
   assigned: number
   required: number
+  confirmed: number
   away: number
+  leaders: Member[]
+  coordinators: Member[]
+  lead?: Member
 }
 
-/** Everyone in each zone a coordinator oversees, with open places and people who can't make it. */
+/** Everyone in each zone a coordinator oversees, with open places, people who can't make it, and attached leaders. */
 export function useZoneRosters(data: EventData, zoneNames: Set<string>, members: Map<string, Member>) {
   return useMemo<ZoneRoster[]>(() => {
-    return data.zones.filter((z) => zoneNames.has(z.name)).map((zone) => {
-      const positions = data.positionsByZone.get(zone.id) ?? []
+    const allMembers = [...members.values()]
+    const existingByName = new Map(data.zones.map((z) => [z.name, z]))
+    const zones: Zone[] = []
+    for (const z of data.zones) {
+      if (zoneNames.has(z.name)) zones.push(z)
+    }
+    let extraIdx = 0
+    for (const name of zoneNames) {
+      if (!existingByName.has(name)) {
+        const ref = zoneRef({ name })
+        const secNum = sectionOfRef(ref)
+        zones.push({
+          id: `virtual_${data.event?.id ?? 'ev'}_${ref ?? extraIdx}`,
+          eventId: data.event?.id ?? '',
+          name,
+          kind: inferZoneKind(name),
+          order: secNum ? 100 + secNum : 900 + extraIdx++,
+          mapRef: ref,
+        })
+      }
+    }
+    zones.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, undefined, { numeric: true }))
+
+    return zones.map((zone) => {
+      let positions = data.positionsByZone.get(zone.id) ?? []
+      const secNum = sectionOfRef(zoneRef(zone))
+      if (positions.length === 0 && secNum && hasSpots(secNum)) {
+        positions = SPOTS.map((sp, idx) => ({
+          id: `${zone.id}_${sp.key}`,
+          zoneId: zone.id,
+          name: sp.name,
+          order: idx + 1,
+          required: 1,
+          spot: sp.key,
+          duty: 'seat' as const,
+        }))
+      }
       const working = data.byZone.get(zone.id) ?? []
       const away = data.unavailable.filter((a) => a.zoneId === zone.id)
       const rows: ZoneRoster['rows'] = []
@@ -46,26 +92,86 @@ export function useZoneRosters(data: EventData, zoneNames: Set<string>, members:
         if (p.spot ? here.length === 0 && gone.length === 0 : missing > 0) rows.push({ position: p })
       }
       const required = positions.reduce((n, p) => n + (p.required ?? 0), 0)
-      return { zone, rows, assigned: working.length, required, away: away.length }
+      const confirmed = working.filter((a) => a.status === 'confirmed').length
+      const leadAssign = working.find((a) => a.isTeamLead)
+      const lead = leadAssign ? members.get(leadAssign.memberId) : undefined
+      const leaders = leadersForZone(allMembers, zone.name)
+      const coordinators = coordinatorsFor(allMembers, zone.name)
+      return { zone, rows, assigned: working.length, required, confirmed, away: away.length, leaders, coordinators, lead }
     })
   }, [data, zoneNames, members])
 }
 
 export function ZoneRosterCard({ r, highlight, id }: { r: ZoneRoster; highlight?: boolean; id?: string }) {
   const short = Math.max(0, r.required - r.assigned)
+  const note = zoneNote(r.zone)
   return (
     <section id={id} className={cn('rounded-2xl border bg-white transition-shadow', highlight ? 'border-wine-400 shadow-float' : 'border-line')}>
       <header className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
         <div className="min-w-0">
-          <h3 className="truncate text-[13px] font-bold uppercase tracking-[0.12em] text-ink-900">{r.zone.name}</h3>
-          {zoneNote(r.zone) && <p className="truncate text-xs text-ink-500">{zoneNote(r.zone)}</p>}
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="truncate text-[13px] font-bold uppercase tracking-[0.12em] text-ink-900">{r.zone.name}</h3>
+            {r.lead && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-gold-100/80 px-2 py-0.5 text-[11px] font-medium text-gold-700 ring-1 ring-gold-300/50">
+                <Crown className="h-3 w-3" /> Lead: {fullName(r.lead)}
+              </span>
+            )}
+          </div>
+          {note && <p className="mt-0.5 truncate text-xs text-ink-500">{note}</p>}
         </div>
         <div className="shrink-0 text-right text-xs">
-          <div className="font-semibold text-ink-900 tabular">{r.assigned}/{r.required}</div>
-          <div className={cn(short ? 'text-wine-600' : 'text-ok-600')}>{short ? `${short} open` : 'Full'}</div>
+          <div className="font-semibold text-ink-900 tabular">{r.assigned}/{r.required} ushers</div>
+          <div className="flex items-center justify-end gap-1.5">
+            {r.confirmed > 0 && <span className="text-ok-600 tabular">{r.confirmed} confirmed ·</span>}
+            <span className={cn(short ? 'text-wine-600' : 'text-ok-600')}>{short ? `${short} open` : 'Full'}</span>
+          </div>
         </div>
       </header>
+      {(r.leaders.length > 0 || r.coordinators.length > 0) && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-line bg-paper/70 px-4 py-2 text-xs">
+          {r.leaders.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="inline-flex items-center gap-1 font-semibold uppercase tracking-[0.08em] text-wine-700">
+                <Crown className="h-3 w-3 text-wine-600" />
+                {r.leaders.length > 1 ? 'Leaders:' : 'Leader:'}
+              </span>
+              {r.leaders.map((l) => (
+                <span key={l.id} className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 font-medium text-ink-800 ring-1 ring-line">
+                  <span>{fullName(l)}</span>
+                  {l.phone && (
+                    <a href={telHref(l.phone)} className="inline-flex items-center gap-0.5 text-wine-600 hover:underline" aria-label={`Call ${fullName(l)}`}>
+                      <Phone className="h-2.5 w-2.5" />
+                      <span className="hidden sm:inline tabular">{formatPhone(l.phone)}</span>
+                    </a>
+                  )}
+                </span>
+              ))}
+            </div>
+          )}
+          {r.coordinators.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="font-semibold uppercase tracking-[0.08em] text-ink-500">
+                {r.coordinators.length > 1 ? 'Coordinators:' : 'Coordinator:'}
+              </span>
+              {r.coordinators.map((c) => (
+                <span key={c.id} className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 font-medium text-ink-800 ring-1 ring-line">
+                  <span>{fullName(c)}</span>
+                  {c.phone && (
+                    <a href={telHref(c.phone)} className="inline-flex items-center gap-0.5 text-wine-600 hover:underline" aria-label={`Call ${fullName(c)}`}>
+                      <Phone className="h-2.5 w-2.5" />
+                      <span className="hidden sm:inline tabular">{formatPhone(c.phone)}</span>
+                    </a>
+                  )}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <ul className="divide-y divide-line">
+        {r.rows.length === 0 && (
+          <li className="px-4 py-4 text-center text-xs text-ink-400">No positions configured for this section yet.</li>
+        )}
         {r.rows.map((row, i) => (
           <li key={i} className="flex items-center gap-3 px-4 py-2.5">
             <div className="min-w-0 flex-1">

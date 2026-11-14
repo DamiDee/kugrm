@@ -35,6 +35,19 @@ export function ZonePanel({ zoneId, data, onAssign, onOpenMember, className }: {
           <span className="tabular text-ink-500">{zs.assigned}/{zs.required}</span>
         </div>
         {zs.lead && <p className="mt-2 flex items-center gap-1.5 text-[13px] text-ink-500"><Crown className="h-3.5 w-3.5 text-gold-600" /> Lead: <span className="font-medium text-ink-800">{fullName(zs.lead)}</span></p>}
+        {zs.leaders.length > 0 && (
+          <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[13px] text-ink-500">
+            <Crown className="h-3.5 w-3.5 text-wine-600" />
+            <span>Section leader{zs.leaders.length > 1 ? 's' : ''}:</span>
+            <span className="font-medium text-ink-800">{zs.leaders.map(fullName).join(', ')}</span>
+          </p>
+        )}
+        {zs.coordinators.length > 0 && (
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[13px] text-ink-500">
+            <span>Coordinator{zs.coordinators.length > 1 ? 's' : ''}:</span>
+            <span className="font-medium text-ink-800">{zs.coordinators.map(fullName).join(', ')}</span>
+          </p>
+        )}
       </div>
       <div className="scrollbar-thin flex-1 overflow-y-auto px-3 py-3">
         {zs.positions.map((p) => {

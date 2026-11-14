@@ -29,6 +29,8 @@ export interface ZoneInfo {
   assigned?: number
   required?: number
   coverage?: number
+  leaders?: string[]
+  coordinators?: string[]
 }
 
 interface Props {
@@ -682,20 +684,36 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
             <p className="text-ink-600">
               {mySpot && <>Your seat is the <span className="font-semibold text-wine-600">{mySpot.name.toLowerCase()}</span> of {mySpot.zoneName}, facing the altar. </>}
               {entrance ? <>The nearest door is <span className="font-semibold text-ok-600">{entrance.ref}</span>. </> : null}
+              {highlightZoneId && info[highlightZoneId]?.leaders?.length ? (
+                <>Section leader{info[highlightZoneId].leaders!.length > 1 ? 's' : ''}: <span className="font-semibold text-ink-900">{info[highlightZoneId].leaders!.join(', ')}</span>. </>
+              ) : null}
+              {highlightZoneId && info[highlightZoneId]?.coordinators?.length ? (
+                <>Coordinator{info[highlightZoneId].coordinators!.length > 1 ? 's' : ''}: <span className="font-semibold text-ink-900">{info[highlightZoneId].coordinators!.join(', ')}</span>. </>
+              ) : null}
               {orient === 'portrait' ? 'The altar is at the top of the plan.' : 'The altar is on the right of the plan.'}
             </p>
           ) : hoveredSpot ? (
             <>
               <p className="truncate font-semibold text-ink-900">{hoveredSpot.zoneName}<span className="font-normal text-ink-500"> · {hoveredSpot.name}</span></p>
-              <p className="truncate text-ink-500">{occupants?.[hoveredSpot.positionId] ?? (uncovered?.[hoveredSpot.positionId] ? `Open: ${uncovered[hoveredSpot.positionId]} can't make it` : 'Open seat')}{onSelectSpot ? ' · tap to assign' : ''}</p>
+              <p className="truncate text-ink-500">
+                {occupants?.[hoveredSpot.positionId] ?? (uncovered?.[hoveredSpot.positionId] ? `Open: ${uncovered[hoveredSpot.positionId]} can't make it` : 'Open seat')}
+                {info[hoveredSpot.zoneId]?.leaders?.length ? ` · Leader: ${info[hoveredSpot.zoneId].leaders!.join(', ')}` : ''}
+                {onSelectSpot ? ' · tap to assign' : ''}
+              </p>
             </>
           ) : activeZone ? (
             <>
               <p className="truncate font-semibold text-ink-900">{activeZone.name}{zoneNote(activeZone) && <span className="font-normal text-ink-500"> · {zoneNote(activeZone)}</span>}</p>
               {info[activeZone.id] && (
-                <p className="text-ink-500 tabular">
-                  {info[activeZone.id].assigned ?? 0}{info[activeZone.id].required ? ` of ${info[activeZone.id].required}` : ''} ushers
-                  {info[activeZone.id].coverage != null && ` · ${info[activeZone.id].coverage}% staffed`}
+                <p className="truncate text-ink-500 tabular">
+                  {info[activeZone.id].assigned != null ? (
+                    <>
+                      {info[activeZone.id].assigned ?? 0}{info[activeZone.id].required ? ` of ${info[activeZone.id].required}` : ''} ushers
+                      {info[activeZone.id].coverage != null && ` · ${info[activeZone.id].coverage}% staffed`}
+                    </>
+                  ) : null}
+                  {info[activeZone.id].leaders?.length ? `${info[activeZone.id].assigned != null ? ' · ' : ''}Leader${info[activeZone.id].leaders!.length > 1 ? 's' : ''}: ${info[activeZone.id].leaders!.join(', ')}` : ''}
+                  {info[activeZone.id].coordinators?.length ? ` · Coord: ${info[activeZone.id].coordinators!.join(', ')}` : ''}
                 </p>
               )}
             </>

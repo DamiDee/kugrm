@@ -32,7 +32,21 @@ export function AssignmentBoard({ data, focusZoneId, onAssign, onOpenZone, filte
             <header className="flex items-start justify-between gap-3 px-5 pb-3 pt-4">
               <button onClick={() => onOpenZone(zs.zone.id)} className="min-w-0 text-left">
                 <h3 id={`zone-${zs.zone.id}`} className="text-[13px] font-bold uppercase tracking-[0.12em] text-ink-900 group-hover:text-wine-700">{zs.zone.name}</h3>
-                <p className="mt-0.5 text-xs text-ink-500 tabular">{zs.assigned} of {zs.required} ushers{zs.lead ? ` · Lead ${fullName(zs.lead)}` : ''}</p>
+                <p className="mt-0.5 text-xs text-ink-500 tabular">
+                  {zs.assigned} of {zs.required} ushers
+                  {zs.lead ? ` · Lead ${fullName(zs.lead)}` : ''}
+                </p>
+                {(zs.leaders.length > 0 || zs.coordinators.length > 0) && (
+                  <p className="mt-0.5 truncate text-[11.5px] text-ink-500">
+                    {zs.leaders.length > 0 && (
+                      <span>Leader{zs.leaders.length > 1 ? 's' : ''}: <span className="font-medium text-ink-700">{zs.leaders.map(fullName).join(', ')}</span></span>
+                    )}
+                    {zs.leaders.length > 0 && zs.coordinators.length > 0 && ' · '}
+                    {zs.coordinators.length > 0 && (
+                      <span>Coord: <span className="font-medium text-ink-700">{zs.coordinators.map(fullName).join(', ')}</span></span>
+                    )}
+                  </p>
+                )}
               </button>
               <button onClick={() => onOpenZone(zs.zone.id)} className="rounded-lg p-1.5 text-ink-400 hover:bg-paper hover:text-ink-700" aria-label={`Open ${zs.zone.name}`}><Maximize2 className="h-3.5 w-3.5" /></button>
             </header>

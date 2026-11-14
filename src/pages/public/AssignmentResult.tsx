@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, CalendarClock, CalendarX2, ChevronDown, History, Hourglass, Mail, Phone, PhoneOff, RotateCcw, Search, Undo2, UserCheck } from 'lucide-react'
+import { ArrowLeft, CalendarClock, CalendarX2, ChevronDown, Crown, History, Hourglass, Mail, Phone, PhoneOff, RotateCcw, Search, Undo2, UserCheck } from 'lucide-react'
 import { useStore } from '@/store/useStore'
 import { LIVE, type ApiError } from '@/lib/api'
 import { availableLive, confirmLive, lookupLive, useLiveMap } from '@/lib/live'
@@ -213,6 +213,14 @@ function Found({ view }: { view: AssignmentView }) {
     }
   }
   const visible = showAll ? team : team.slice(0, 8)
+  const leaders = current.leaders?.length ? current.leaders : current.leader ? [current.leader] : []
+  const coordinators = current.coordinators?.length ? current.coordinators : current.coordinator ? [current.coordinator] : []
+  const mapInfo = useMemo(() => ({
+    [current.zone.id]: {
+      leaders: leaders.map(fullName),
+      coordinators: coordinators.map(fullName),
+    },
+  }), [current.zone.id, leaders, coordinators])
 
   // group teammates by position for larger teams
   const grouped = useMemo(() => {
@@ -237,7 +245,7 @@ function Found({ view }: { view: AssignmentView }) {
             <p className="text-sm text-ink-500">{current.position.spot ? 'Your usher seat is marked on the floor plan.' : `${current.zone.name} is highlighted on the floor plan.`}</p>
           </div>
         </div>
-        <VenueMap zones={eventZones} mode="locate" highlightZoneId={current.zone.id} highlightPositionId={current.position.id} positions={mapPositions} occupants={occupants} hideLegend pinLabel={current.position.spot ? 'You stand here' : `You · ${current.position.name}`} />
+        <VenueMap zones={eventZones} mode="locate" highlightZoneId={current.zone.id} highlightPositionId={current.position.id} info={mapInfo} positions={mapPositions} occupants={occupants} hideLegend pinLabel={current.position.spot ? 'You stand here' : `You · ${current.position.name}`} />
       </motion.section>
 
       {current.event.instructions && (
@@ -249,20 +257,44 @@ function Found({ view }: { view: AssignmentView }) {
       <motion.section {...fade} transition={{ ...fade.transition, delay: 0.25 }} aria-labelledby="team-h">
         <div className="mb-2 flex items-end justify-between gap-4">
           <div>
-            <h2 id="team-h" className="text-[17px] font-semibold tracking-tight text-ink-900">Your team</h2>
-            <p className="text-sm text-ink-500">Other ushers in {current.zone.name} this session. Tap a number to call.</p>
+            <h2 id="team-h" className="text-[17px] font-semibold tracking-tight text-ink-900">Your team &amp; leadership</h2>
+            <p className="text-sm text-ink-500">Leaders, coordinators and ushers in {current.zone.name} this session. Tap a number to call.</p>
           </div>
           <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-xs font-medium text-ink-600 ring-1 ring-line tabular">{team.length} ushers</span>
         </div>
-        {current.coordinator && (
-          <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl bg-gold-100/60 px-4 py-3 ring-1 ring-gold-300/50">
-            <div className="min-w-0">
-              <div className="text-[12px] font-semibold uppercase tracking-[0.1em] text-gold-700">Your coordinator</div>
-              <div className="truncate font-medium text-ink-900">{fullName(current.coordinator)}</div>
-            </div>
-            <a href={telHref(current.coordinator.phone)} className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-white px-3 text-[13px] font-medium text-ink-800 ring-1 ring-line">
-              <Phone className="h-3.5 w-3.5 text-wine-500" /> {formatPhone(current.coordinator.phone)}
-            </a>
+        {(leaders.length > 0 || coordinators.length > 0) && (
+          <div className="mb-3 space-y-2">
+            {leaders.map((leader) => (
+              <div key={leader.id} className="flex items-center justify-between gap-3 rounded-2xl bg-wine-50/70 px-4 py-3 ring-1 ring-wine-200/80">
+                <div className="min-w-0">
+                  <div className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-[0.1em] text-wine-700">
+                    <Crown className="h-3.5 w-3.5 text-wine-600" />
+                    {leaders.length > 1 ? 'Section leader' : 'Your leader'} · {current.zone.name}
+                  </div>
+                  <div className="truncate font-medium text-ink-900">{fullName(leader)}</div>
+                </div>
+                {leader.phone && (
+                  <a href={telHref(leader.phone)} className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-white px-3 text-[13px] font-medium text-ink-800 ring-1 ring-line hover:ring-line-strong">
+                    <Phone className="h-3.5 w-3.5 text-wine-500" /> {formatPhone(leader.phone)}
+                  </a>
+                )}
+              </div>
+            ))}
+            {coordinators.map((coord) => (
+              <div key={coord.id} className="flex items-center justify-between gap-3 rounded-2xl bg-gold-100/60 px-4 py-3 ring-1 ring-gold-300/50">
+                <div className="min-w-0">
+                  <div className="text-[11.5px] font-semibold uppercase tracking-[0.1em] text-gold-700">
+                    {coordinators.length > 1 ? 'Section coordinator' : 'Your coordinator'} · {current.zone.name}
+                  </div>
+                  <div className="truncate font-medium text-ink-900">{fullName(coord)}</div>
+                </div>
+                {coord.phone && (
+                  <a href={telHref(coord.phone)} className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-white px-3 text-[13px] font-medium text-ink-800 ring-1 ring-line hover:ring-line-strong">
+                    <Phone className="h-3.5 w-3.5 text-wine-500" /> {formatPhone(coord.phone)}
+                  </a>
+                )}
+              </div>
+            ))}
           </div>
         )}
         <div className="surface p-2">
@@ -288,6 +320,8 @@ function Found({ view }: { view: AssignmentView }) {
 function AwayPanel({ view }: { view: AssignmentView }) {
   const undo = useStore((s) => s.undoUnavailable)
   const live = useContext(LiveCtx)
+  const leaders = view.leaders?.length ? view.leaders : view.leader ? [view.leader] : []
+  const coordinators = view.coordinators?.length ? view.coordinators : view.coordinator ? [view.coordinator] : []
   const backLive = async () => {
     try {
       await availableLive(view.assignment.id, live.phone)
@@ -304,15 +338,52 @@ function AwayPanel({ view }: { view: AssignmentView }) {
     else toast.error('Your place has been given to someone else', 'Call your coordinator to be placed again.')
   }
   return (
-    <StatePanel
-      icon={<CalendarX2 className="h-6 w-6" />}
-      badge="Can’t make it"
-      tone="bad"
-      title={`You told us you can’t make ${sessionShort(view.event)}`}
-      body={`Your ${view.position.spot ? 'seat' : 'place'} at ${view.zone.name} (${view.position.name}) is open for cover this session.${view.assignment.unavailableReason ? ` Reason: ${view.assignment.unavailableReason}.` : ''}`}
-      event={view.event}
-      action={<Button variant="primary" onClick={back}><Undo2 className="h-4 w-4" /> I can come after all</Button>}
-    />
+    <div className="space-y-4">
+      <StatePanel
+        icon={<CalendarX2 className="h-6 w-6" />}
+        badge="Can’t make it"
+        tone="bad"
+        title={`You told us you can’t make ${sessionShort(view.event)}`}
+        body={`Your ${view.position.spot ? 'seat' : 'place'} at ${view.zone.name} (${view.position.name}) is open for cover this session.${view.assignment.unavailableReason ? ` Reason: ${view.assignment.unavailableReason}.` : ''}`}
+        event={view.event}
+        action={<Button variant="primary" onClick={back}><Undo2 className="h-4 w-4" /> I can come after all</Button>}
+      />
+      {(leaders.length > 0 || coordinators.length > 0) && (
+        <div className="space-y-2">
+          {leaders.map((leader) => (
+            <div key={leader.id} className="flex items-center justify-between gap-3 rounded-2xl bg-wine-50/70 px-4 py-3 ring-1 ring-wine-200/80">
+              <div className="min-w-0">
+                <div className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-[0.1em] text-wine-700">
+                  <Crown className="h-3.5 w-3.5 text-wine-600" />
+                  {leaders.length > 1 ? 'Section leader' : 'Your leader'} · {view.zone.name}
+                </div>
+                <div className="truncate font-medium text-ink-900">{fullName(leader)}</div>
+              </div>
+              {leader.phone && (
+                <a href={telHref(leader.phone)} className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-white px-3 text-[13px] font-medium text-ink-800 ring-1 ring-line hover:ring-line-strong">
+                  <Phone className="h-3.5 w-3.5 text-wine-500" /> {formatPhone(leader.phone)}
+                </a>
+              )}
+            </div>
+          ))}
+          {coordinators.map((coord) => (
+            <div key={coord.id} className="flex items-center justify-between gap-3 rounded-2xl bg-gold-100/60 px-4 py-3 ring-1 ring-gold-300/50">
+              <div className="min-w-0">
+                <div className="text-[11.5px] font-semibold uppercase tracking-[0.1em] text-gold-700">
+                  {coordinators.length > 1 ? 'Section coordinator' : 'Your coordinator'} · {view.zone.name}
+                </div>
+                <div className="truncate font-medium text-ink-900">{fullName(coord)}</div>
+              </div>
+              {coord.phone && (
+                <a href={telHref(coord.phone)} className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-white px-3 text-[13px] font-medium text-ink-800 ring-1 ring-line hover:ring-line-strong">
+                  <Phone className="h-3.5 w-3.5 text-wine-500" /> {formatPhone(coord.phone)}
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 

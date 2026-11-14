@@ -5,7 +5,7 @@ import { toast } from '@/components/ui/Toast'
 import type { Assignment, FallbackKeyResponse, Member, MinistryEvent, Position, Zone } from '@/data/types'
 import { LIVE, api, ApiError, setOnSignedOut, setOnTeamSignedOut, tokens } from './api'
 import { normalizePhone } from './utils'
-import type { LookupResult } from './selectors'
+import { coordinatorsFor, leadersForMember, leadersForZone, type LookupResult } from './selectors'
 
 /**
  * Connects the store to the backend. Screens keep reading the store: it is
@@ -326,7 +326,41 @@ export const rotateFallbackKey = async (memberId: string) => {
   return res
 }
 
-const teamMember = (m: any, extra: Partial<Member> = {}): Member => ({ status: 'active', ...m, ...extra })
+const teamMember = (m: any, extra: Partial<Member> = {}): Member => {
+  const rawIds = [
+    ...(Array.isArray(m?.leaderIds) ? m.leaderIds : []),
+    ...(Array.isArray(m?.leaders) ? m.leaders.map((l: any) => (typeof l === 'string' ? l : l?.id)).filter(Boolean) : []),
+    m?.leaderId,
+    m?.leader?.id,
+    ...(Array.isArray(extra.leaderIds) ? extra.leaderIds : []),
+    extra.leaderId,
+  ].filter(Boolean) as string[]
+  const leaderIds = rawIds.length ? [...new Set(rawIds)] : undefined
+  return {
+    status: 'active',
+    phone: '',
+    ...m,
+    ...extra,
+    leaderId: leaderIds?.[0] ?? extra.leaderId ?? m?.leaderId,
+    leaderIds,
+  }
+}
+
+const extractPeopleList = (raw: any, role?: Member['role']): Member[] => {
+  if (!raw) return []
+  const arr = Array.isArray(raw) ? raw : [raw]
+  const out: Member[] = []
+  const seen = new Set<string>()
+  for (const item of arr) {
+    const m = item?.member ?? item
+    if (!m || typeof m !== 'object') continue
+    const id = m.id ?? (m.phone || m.firstName ? `${role ?? 'm'}_${m.phone || `${m.firstName}_${m.lastName}`}` : undefined)
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    out.push(teamMember({ ...m, id }, role ? { role } : {}))
+  }
+  return out
+}
 
 /** Fills the store from /team/me, so the team page reads it like any other roster. */
 export async function loadTeam(eventId?: string) {
@@ -344,28 +378,121 @@ export async function loadTeam(eventId?: string) {
   const positions: Position[] = []
   const assignments: Assignment[] = []
   const people = new Map<string, Member>()
-  const add = (m: Member) => people.set(m.id, { ...people.get(m.id), ...m })
-  const leaderId = r.me.role === 'leader' ? r.me.id : r.me.leader?.id
-  for (const c of r.coordinators ?? []) {
+  const add = (m: Member) => {
+    const prev = people.get(m.id)
+    const leaderIds = [...new Set([...(prev?.leaderIds ?? []), ...(m.leaderIds ?? []), ...(prev?.leaderId ? [prev.leaderId] : []), ...(m.leaderId ? [m.leaderId] : [])])]
+    const coordinates = [...new Set([...(prev?.coordinates ?? []), ...(m.coordinates ?? [])])]
+    people.set(m.id, {
+      ...prev,
+      ...m,
+      ...(leaderIds.length ? { leaderId: leaderIds[0], leaderIds } : {}),
+      ...(coordinates.length ? { coordinates } : {}),
+    })
+  }
+
+  const meLeaders = [
+    ...extractPeopleList(r.me?.leaders, 'leader'),
+    ...extractPeopleList(r.me?.leader, 'leader'),
+    ...extractPeopleList(r.leaders, 'leader'),
+    ...extractPeopleList(r.leader, 'leader'),
+  ]
+  meLeaders.forEach(add)
+  const meLeaderIds = [
+    ...(r.me?.role === 'leader' ? [r.me.id] : []),
+    ...meLeaders.map((l) => l.id),
+    ...(Array.isArray(r.me?.leaderIds) ? r.me.leaderIds : []),
+    ...(r.me?.leaderId ? [r.me.leaderId] : []),
+  ].filter(Boolean) as string[]
+
+  const rawCoordinators = r.coordinators?.length
+    ? r.coordinators
+    : r.me?.role === 'coordinator'
+      ? [{ member: r.me, zones: r.zones ?? r.me?.zones ?? [], leaders: meLeaders }]
+      : []
+
+  for (const c of rawCoordinators) {
+    const cLeaders = [
+      ...extractPeopleList(c.leaders, 'leader'),
+      ...extractPeopleList(c.leader, 'leader'),
+      ...extractPeopleList(c.member?.leaders, 'leader'),
+      ...extractPeopleList(c.member?.leader, 'leader'),
+    ]
+    cLeaders.forEach(add)
+    const zoneLeaderIds: string[] = []
     for (const z of c.zones ?? []) {
-      zones.push(toZone(z.zone, ev.id))
-      positions.push(...(z.positions ?? []).map((p: any) => toPosition(p, z.zone.id)))
+      const zObj = z.zone ?? z
+      zones.push(toZone(zObj, ev.id))
+      positions.push(...(z.positions ?? zObj.positions ?? []).map((p: any) => toPosition(p, zObj.id)))
+      const zLeaders = [
+        ...extractPeopleList(z.leaders, 'leader'),
+        ...extractPeopleList(z.leader, 'leader'),
+        ...extractPeopleList(zObj.leaders, 'leader'),
+        ...extractPeopleList(zObj.leader, 'leader'),
+      ]
+      zLeaders.forEach((l) => {
+        add(l)
+        zoneLeaderIds.push(l.id)
+      })
       for (const u of z.ushers ?? []) {
-        add(teamMember(u.member))
-        assignments.push({ id: u.assignmentId, memberId: u.member.id, eventId: ev.id, zoneId: z.zone.id, positionId: u.positionId, isTeamLead: !!u.isTeamLead, status: u.status, updatedAt: '' })
+        add(teamMember(u.member ?? u))
+        const mObj = u.member ?? u
+        assignments.push({ id: u.assignmentId ?? u.id, memberId: mObj.id, eventId: ev.id, zoneId: zObj.id, positionId: u.positionId, isTeamLead: !!u.isTeamLead, status: u.status ?? 'assigned', updatedAt: '' })
       }
       for (const u of z.unavailable ?? []) {
-        const id = u.member.id ?? `away_${u.assignmentId}`
-        add(teamMember(u.member, { id }))
-        assignments.push({ id: u.assignmentId, memberId: id, eventId: ev.id, zoneId: z.zone.id, positionId: u.positionId, isTeamLead: false, status: 'unavailable', unavailableReason: u.reason ?? undefined, updatedAt: '' })
+        const mObj = u.member ?? u
+        const id = mObj.id ?? `away_${u.assignmentId ?? u.id}`
+        add(teamMember(mObj, { id }))
+        assignments.push({ id: u.assignmentId ?? u.id, memberId: id, eventId: ev.id, zoneId: zObj.id, positionId: u.positionId, isTeamLead: false, status: 'unavailable', unavailableReason: u.reason ?? u.unavailableReason ?? undefined, updatedAt: '' })
       }
     }
-    add(teamMember(c.member, { role: 'coordinator', leaderId, coordinates: (c.zones ?? []).map((z: any) => z.zone.name) }))
+    const cMember = c.member ?? c
+    const cLeaderIds = [...new Set([
+      ...meLeaderIds,
+      ...cLeaders.map((l) => l.id),
+      ...zoneLeaderIds,
+      ...(Array.isArray(c.leaderIds) ? c.leaderIds : []),
+      ...(c.leaderId ? [c.leaderId] : []),
+      ...(Array.isArray(cMember?.leaderIds) ? cMember.leaderIds : []),
+      ...(cMember?.leaderId ? [cMember.leaderId] : []),
+    ])]
+    const cCoords = [...new Set([
+      ...(c.zones ?? []).map((z: any) => (z.zone ?? z)?.name).filter(Boolean),
+      ...(Array.isArray(c.coordinates) ? c.coordinates : []),
+      ...(Array.isArray(cMember?.coordinates) ? cMember.coordinates : []),
+      ...(cMember?.id === r.me?.id && Array.isArray(r.me?.coordinates) ? r.me.coordinates : []),
+    ])]
+    if (cMember?.id) {
+      add(teamMember(cMember, {
+        role: 'coordinator',
+        leaderId: cLeaderIds[0],
+        leaderIds: cLeaderIds,
+        coordinates: cCoords,
+      }))
+    }
   }
-  if (r.me.leader) add(teamMember(r.me.leader, { role: 'leader' }))
-  add(teamMember({ id: r.me.id, firstName: r.me.firstName, lastName: r.me.lastName, phone: r.me.phone }, { role: r.me.role, ...(r.me.role === 'coordinator' ? { leaderId } : {}) }))
+  const myCoordinates = [...new Set([
+    ...(Array.isArray(r.me?.coordinates) ? r.me.coordinates : []),
+    ...(people.get(r.me.id)?.coordinates ?? []),
+  ])]
+  add(teamMember(
+    { id: r.me.id, firstName: r.me.firstName, lastName: r.me.lastName, phone: r.me.phone },
+    {
+      role: r.me.role,
+      ...(r.me.role === 'coordinator' ? { leaderId: meLeaderIds[0], leaderIds: meLeaderIds, coordinates: myCoordinates } : {}),
+    },
+  ))
   const known = new Map(get().members.map((m) => [m.id, m]))
-  people.forEach((m, id) => known.set(id, { ...known.get(id), ...m }))
+  people.forEach((m, id) => {
+    const prev = known.get(id)
+    const leaderIds = [...new Set([...(prev?.leaderIds ?? []), ...(m.leaderIds ?? []), ...(prev?.leaderId ? [prev.leaderId] : []), ...(m.leaderId ? [m.leaderId] : [])])]
+    const coordinates = [...new Set([...(prev?.coordinates ?? []), ...(m.coordinates ?? [])])]
+    known.set(id, {
+      ...prev,
+      ...m,
+      ...(leaderIds.length ? { leaderId: leaderIds[0], leaderIds } : {}),
+      ...(coordinates.length ? { coordinates } : {}),
+    })
+  })
   const sessions: MinistryEvent[] = (r.sessions?.length ? r.sessions : [ev]).map((s: any) => ({ ...ev, ...(s.id === ev.id ? ev : s) }))
   set({ members: [...known.values()], events: mergeEvents(sessions), activeEventId: get().activeEventId || ev.id, teamUser: { memberId: r.me.id } })
   replaceRoster(ev.id, zones, positions, assignments)
@@ -381,18 +508,82 @@ export interface LiveMap {
   occupants: Record<string, string>
 }
 
-function toView(v: any, event: MinistryEvent) {
+function toView(v: any, event: MinistryEvent, root?: any) {
+  const zone = toZone(v.zone, event.id)
+  const position = toPosition(v.position, v.zone?.id)
+  const teammates = (v.teammates ?? []).map((t: any, i: number) => ({
+    ...t,
+    member: { id: t.member?.id ?? `teammate_${i}`, status: 'active', phone: '', ...t.member },
+    position: toPosition({ order: i, ...t.position }, v.zone?.id),
+  }))
+  const storeMembers = get().members
+
+  const rawCoordinators = [
+    ...extractPeopleList(v.coordinators, 'coordinator'),
+    ...extractPeopleList(v.coordinator, 'coordinator'),
+    ...extractPeopleList(v.zone?.coordinators, 'coordinator'),
+    ...extractPeopleList(v.zone?.coordinator, 'coordinator'),
+    ...extractPeopleList(root?.coordinators, 'coordinator'),
+    ...extractPeopleList(root?.coordinator, 'coordinator'),
+    ...coordinatorsFor(storeMembers, zone.name),
+  ]
+  const seenCoord = new Set<string>()
+  const coordinators = rawCoordinators.filter((c) => {
+    const key = c.id || `${c.firstName}_${c.lastName}_${c.phone}`
+    if (seenCoord.has(key)) return false
+    seenCoord.add(key)
+    return true
+  })
+
+  const rawCoordObjs = [
+    ...(Array.isArray(v.coordinators) ? v.coordinators : []),
+    v.coordinator,
+    ...(Array.isArray(v.zone?.coordinators) ? v.zone.coordinators : []),
+    v.zone?.coordinator,
+  ].filter(Boolean)
+
+  const rawLeaders = [
+    ...extractPeopleList(v.leaders, 'leader'),
+    ...extractPeopleList(v.leader, 'leader'),
+    ...extractPeopleList(v.zone?.leaders, 'leader'),
+    ...extractPeopleList(v.zone?.leader, 'leader'),
+    ...rawCoordObjs.flatMap((c: any) => [
+      ...extractPeopleList(c?.leaders, 'leader'),
+      ...extractPeopleList(c?.leader, 'leader'),
+      ...extractPeopleList(c?.member?.leaders, 'leader'),
+      ...extractPeopleList(c?.member?.leader, 'leader'),
+    ]),
+    ...extractPeopleList(root?.leaders, 'leader'),
+    ...extractPeopleList(root?.leader, 'leader'),
+    ...extractPeopleList(root?.member?.leaders, 'leader'),
+    ...extractPeopleList(root?.member?.leader, 'leader'),
+    ...coordinators.flatMap((c) => leadersForMember(c, storeMembers)),
+    ...leadersForZone(storeMembers, zone.name),
+  ]
+  const seenLeader = new Set<string>()
+  const leaders = rawLeaders.filter((l) => {
+    const key = l.id || `${l.firstName}_${l.lastName}_${l.phone}`
+    if (seenLeader.has(key)) return false
+    seenLeader.add(key)
+    return true
+  })
+
+  const teamLead = v.teamLead
+    ? teamMember(v.teamLead)
+    : teammates.find((t: any) => t.isTeamLead)?.member
+
   return {
     ...v,
     event,
     assignment: { ...v.assignment, eventId: event.id, zoneId: v.zone?.id, positionId: v.position?.id },
-    zone: toZone(v.zone, event.id),
-    position: toPosition(v.position, v.zone?.id),
-    teammates: (v.teammates ?? []).map((t: any, i: number) => ({
-      ...t,
-      member: { id: t.member.id ?? `teammate_${i}`, status: 'active', phone: '', ...t.member },
-      position: toPosition({ order: i, ...t.position }, v.zone?.id),
-    })),
+    zone,
+    position,
+    teamLead,
+    teammates,
+    coordinator: coordinators[0],
+    coordinators,
+    leader: leaders[0],
+    leaders,
   }
 }
 
@@ -404,10 +595,10 @@ export async function lookupLive(phone: string): Promise<LookupResult> {
   }
   return {
     kind: 'member',
-    member: { status: 'active', phone: normalizePhone(phone), ...r.member },
+    member: teamMember({ phone: normalizePhone(phone), ...r.member }),
     series: r.series ?? undefined,
-    sessions: (r.sessions ?? []).map((s: any) => ({ event: s.event, view: s.view ? toView(s.view, s.event) : undefined })),
-    others: (r.others ?? []).map((o: any) => toView(o, o.event)),
+    sessions: (r.sessions ?? []).map((s: any) => ({ event: s.event, view: s.view ? toView(s.view, s.event, r) : undefined })),
+    others: (r.others ?? []).map((o: any) => toView(o, o.event, r)),
   }
 }
 

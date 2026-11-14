@@ -59,7 +59,7 @@ export default function Assignments() {
   const rows = useMemo(() => {
     const t = q.trim().toLowerCase()
     const d = normalizePhone(q)
-    const leadByZone = new Map(data.zoneStats.map((z) => [z.zone.id, z.lead]))
+    const leadByZone = new Map(data.zoneStats.map((z) => [z.zone.id, z.lead ?? z.leaders[0] ?? z.coordinators[0]]))
     const list = [...data.assignments, ...data.unavailable]
       .map((a) => ({ a, m: memberMap.get(a.memberId)!, z: data.zoneById.get(a.zoneId)!, p: data.positionById.get(a.positionId)!, lead: leadByZone.get(a.zoneId) }))
       .filter((r) => r.m && r.z && r.p)
@@ -76,7 +76,7 @@ export default function Assignments() {
   const onSort = (k: string) => setSort((s) => ({ key: k, dir: s.key === k && s.dir === 'asc' ? 'desc' : 'asc' }))
   const toRemove = confirmId ? [...data.assignments, ...data.unavailable].find((a) => a.id === confirmId) : undefined
 
-  const info = Object.fromEntries(data.zoneStats.map((z) => [z.zone.id, { assigned: z.assigned, required: z.required, coverage: z.coverage }]))
+  const info = Object.fromEntries(data.zoneStats.map((z) => [z.zone.id, { assigned: z.assigned, required: z.required, coverage: z.coverage, leaders: z.leaders.map(fullName), coordinators: z.coordinators.map(fullName) }]))
 
   return (
     <div>
