@@ -29,9 +29,9 @@ export type Rect = { x: number; y: number; w: number; h: number }
 
 export const PLAN = {
   /** everything drawn, including labels outside the walls */
-  view: { x: 0, y: 8, w: 1536, h: 1282 } as Rect,
+  view: { x: -10, y: 0, w: 1546, h: 1290 } as Rect,
   building: { x: 102, y: 98, w: 1281, h: 1098 } as Rect,
-  seating: { x: 180, y: 112, w: 975, h: 1073 } as Rect,
+  seating: { x: 180, y: 112, w: 974, h: 1073 } as Rect,
 }
 
 const COLS = 7
@@ -56,15 +56,30 @@ export function sectionCell(n: number) {
 }
 export function sectionRect(n: number): Rect {
   const { col, row } = sectionCell(n)
-  return { x: COL_X[col], y: ROW_Y[row], w: COL_W[col], h: ROW_H }
+  let x = COL_X[col]
+  let w = COL_W[col]
+  // Sections beside the in-hall media and technical desks are narrower to make room for the desks
+  if (n === 54 || n === 55) w = 99
+  else if (n === 42 || n === 43) { x = 551; w = 100 }
+  else if (n === 30 || n === 31) w = 94
+  else if (n === 18 || n === 19) { x = 817; w = 98 }
+  return { x, y: ROW_Y[row], w, h: ROW_H }
 }
-export const colCenterX = (col: number) => COL_X[col] + COL_W[col] / 2
+export const colCenterX = (col: number, aisle?: number) => {
+  if (aisle === 5) {
+    if (col === 2) return 396 + 99 / 2
+    if (col === 3) return 551 + 100 / 2
+    if (col === 4) return 660 + 94 / 2
+    if (col === 5) return 817 + 98 / 2
+  }
+  return COL_X[col] + COL_W[col] / 2
+}
 
 /* ---------- front aisle and the named front sections ---------- */
 
 const FRONT_X = COL_X[COLS - 1] + COL_W[COLS - 1]
-const NAMED_X = 1062
-const NAMED_W = 90
+const NAMED_X = 1072
+const NAMED_W = 80
 /** The aisle between Sections 1–12 and the named front sections. */
 export const FRONT_AISLE: Rect = { x: FRONT_X, y: PLAN.seating.y, w: NAMED_X - FRONT_X, h: PLAN.seating.h }
 
@@ -257,11 +272,11 @@ export const AREAS: PlanArea[] = [
   { ref: 'screen', name: 'Crane Screen', rect: { x: 1365, y: 470, w: 15, h: 355 }, note: 'Crane and screen, in the 1 m strip behind the stage' },
   { ref: 'walkway', name: 'Covered Walkway', rect: { x: 1192, y: 1005, w: 189, h: 35 }, note: 'Covered, screened walkway inside, from door SE2 to the stage' },
   { ref: 'reserve', name: 'Stage Reserve', rect: { x: 1192, y: 1052, w: 170, h: 112 } },
-  { ref: 'apostle', name: "Apostle's Chairs", rect: { x: 1162, y: 600, w: 18, h: 190 }, note: 'Nine special chairs for the Apostle and guest ministers', aliases: ['Apostle and Guest Ministers'] },
-  { ref: 'protocol', name: 'Protocol Row', rect: { x: 1116, y: 597, w: 12, h: 92 }, note: 'ADCs and PAs, the front row of Delta', aliases: ['ADCs & PAs', 'ADCs and PAs'] },
-  { ref: 'media1', name: 'Media Desk 1', rect: { x: 500, y: 572, w: 46, h: 156 }, note: 'Media and videography, by Sections 42–43 and 54–55' },
-  { ref: 'techdesk', name: 'Technical Desk', rect: { x: 760, y: 572, w: 24, h: 156 }, note: 'Technical, by Sections 18–19 and 30–31' },
-  { ref: 'media2', name: 'Media Desk 2', rect: { x: 788, y: 572, w: 24, h: 156 }, note: 'Media and videography, by Sections 18–19' },
+  { ref: 'apostle', name: "Apostle's Chairs", rect: { x: 1170, y: 555, w: 18, h: 210 }, note: 'Nine special chairs for the Apostle and guest ministers', aliases: ['Apostle and Guest Ministers'] },
+  { ref: 'protocol', name: 'Protocol Row', rect: { x: 1118, y: 593, w: 12, h: 100 }, note: 'ADCs and PAs, the front row of Delta', aliases: ['ADCs & PAs', 'ADCs and PAs'] },
+  { ref: 'media1', name: 'Media Desk 1', rect: { x: 500, y: 569, w: 46, h: 157 }, note: 'Media and videography, by Sections 42–43 and 54–55' },
+  { ref: 'techdesk', name: 'Technical Desk', rect: { x: 759, y: 569, w: 25, h: 157 }, note: 'Technical, by Sections 18–19 and 30–31' },
+  { ref: 'media2', name: 'Media Desk 2', rect: { x: 787, y: 569, w: 25, h: 157 }, note: 'Media and videography, by Sections 18–19' },
   { ref: 'front', name: 'Front Aisle', rect: FRONT_AISLE, note: 'Between Sections 1–12 and the named front sections, with door P10' },
 ]
 

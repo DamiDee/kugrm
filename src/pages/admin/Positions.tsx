@@ -45,7 +45,7 @@ function AddZone({ open, onClose, onSave }: { open: boolean; onClose: () => void
   const [kind, setKind] = useState<ZoneKind>('aisle')
   useEffect(() => { if (open) { setName(''); setKind('aisle') } }, [open])
   return (
-    <Modal open={open} onClose={onClose} size="sm" title="Add zone" description="Name it like the floor plan (Aisle 2, Section 14, Door D4) and it appears on the venue map. Other areas are listed beside it." footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!name.trim()} onClick={() => { onSave(name.trim(), kind); onClose() }}>Add zone</Button></>}>
+    <Modal open={open} onClose={onClose} size="sm" title="Add zone" description="Name it like the floor plan (Aisle 2, Section 14, Sierra, Door C4) and it appears on the venue map. Other areas are listed beside it." footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!name.trim()} onClick={() => { onSave(name.trim(), kind); onClose() }}>Add zone</Button></>}>
       <div className="space-y-4 pb-2">
         <Field label="Type" htmlFor="zk"><Select id="zk" value={kind} onChange={(v) => setKind(v as ZoneKind)}><option value="aisle">Aisle</option><option value="section">Section</option><option value="door">Door</option><option value="area">Area (altar, car park, overflow…)</option></Select></Field>
         <Field label="Name" htmlFor="zn"><input id="zn" className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder={{ aisle: 'Aisle 6', section: 'Section 14', door: 'Door D4', area: 'Overflow' }[kind]} onKeyDown={(e) => e.key === 'Enter' && name.trim() && (onSave(name.trim(), kind), onClose())} /></Field>

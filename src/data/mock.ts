@@ -25,13 +25,17 @@ export const AISLE_POSITIONS: PosSpec[] = [
   { name: 'Floor Marshal', required: 3, duty: 'crowd' },
 ]
 
-/** Sections without usher seats get their own positions. */
-const SPOTLESS_POSITIONS: Record<number, PosSpec> = {
-  5: { name: 'Section Usher', required: 2, duty: 'protocol' },
-  6: { name: 'Protocol Support', required: 3, duty: 'protocol' },
-  7: { name: 'Section Usher', required: 2, duty: 'protocol' },
-  17: { name: 'Tech Liaison', required: 1, duty: 'support' },
-  18: { name: 'Media Liaison', required: 1, duty: 'support' },
+/** Back-column sections (73–84) and named front sections (5 rows each) have no corner usher seats. */
+const BACK_SECTION_POSITIONS: PosSpec[] = [
+  { name: 'Section Usher', required: 2, duty: 'seat' },
+]
+
+const NAMED_SECTION_POSITIONS: Record<NamedStyle, PosSpec[]> = {
+  named: [{ name: 'Section Usher', required: 2, duty: 'seat' }],
+  lady: [{ name: 'Section Protocol', required: 2, duty: 'protocol' }],
+  protocol: [{ name: 'Protocol Support', required: 3, duty: 'protocol' }],
+  contemporaries: [{ name: 'Section Protocol', required: 2, duty: 'protocol' }],
+  international: [{ name: 'Section Usher', required: 2, duty: 'protocol' }],
 }
 
 const DOOR_POSITIONS: Record<DoorKind, PosSpec[]> = {
@@ -45,11 +49,16 @@ const DOOR_POSITIONS: Record<DoorKind, PosSpec[]> = {
 /** Areas on the floor plan (mapRef) and off it (no mapRef: listed beside the map). */
 export const AREA_ZONES: { name: string; ref?: string; positions: PosSpec[] }[] = [
   { name: 'Altar & Pulpit', ref: 'altar', positions: [{ name: 'Altar Protocol', required: 12, duty: 'protocol' }] },
+  { name: 'Councillors', ref: 'council', positions: [{ name: 'Councillors Protocol', required: 4, duty: 'protocol' }] },
   { name: 'Worship Team', ref: 'worship', positions: [{ name: 'Stage Support', required: 6, duty: 'support' }] },
   { name: "Apostle's Chairs", ref: 'apostle', positions: [{ name: 'Chair Protocol', required: 9, duty: 'protocol' }] },
   { name: 'Protocol Row', ref: 'protocol', positions: [{ name: 'Protocol Support', required: 6, duty: 'protocol' }] },
   { name: 'Technical Space', ref: 'tech', positions: [{ name: 'Tech Liaison', required: 3, duty: 'support' }] },
   { name: 'Covered Walkway', ref: 'walkway', positions: [{ name: 'Walkway Control', required: 4, duty: 'crowd' }] },
+  { name: 'Front Aisle', ref: 'front', positions: [{ name: 'Front Aisle Marshal', required: 4, duty: 'crowd' }] },
+  { name: 'Media Desk 1', ref: 'media1', positions: [{ name: 'Media Liaison', required: 2, duty: 'support' }] },
+  { name: 'Technical Desk', ref: 'techdesk', positions: [{ name: 'Tech Liaison', required: 2, duty: 'support' }] },
+  { name: 'Media Desk 2', ref: 'media2', positions: [{ name: 'Media Liaison', required: 2, duty: 'support' }] },
   { name: 'Main Gate', positions: [{ name: 'Greeter', required: 20, duty: 'greeter' }, { name: 'Crowd Control', required: 12, duty: 'crowd' }] },
   { name: 'Registration Area', positions: [{ name: 'Registration Desk', required: 24, duty: 'support' }] },
   { name: 'Car Park', positions: [{ name: 'Traffic Direction', required: 30, duty: 'crowd' }] },
@@ -148,13 +157,16 @@ export function createSeed(): SeedState {
       groups.push({ names: secs.map((n) => `Section ${n}`), leader: LEADERS[nave], who: nave === 'Nave B' && col === 3 ? 'm2' : undefined })
     }
   }
+  groups.push({ names: ['Sierra', 'Rainbow', 'Gulf', 'Foxtrot'], leader: LEADERS['Nave C'] })
+  groups.push({ names: ['Echo', 'Delta', 'Charlie', 'Front Aisle'], leader: LEADERS['Nave B'] })
+  groups.push({ names: ['Bravo', 'Alpha', 'Yankee', 'Xray'], leader: LEADERS['Nave A'] })
   groups.push({ names: ['Aisle 1', 'Aisle 2', 'Aisle 3'], leader: LEADERS['Nave C'] })
   groups.push({ names: ['Aisle 4', 'Aisle 5', 'Aisle 6'], leader: LEADERS['Nave B'] })
   groups.push({ names: ['Aisle 7', 'Aisle 8', 'Aisle 9'], leader: LEADERS['Nave A'] })
-  groups.push({ names: ['Altar & Pulpit', "Apostle's Chairs", 'Protocol Row', 'Worship Team', 'Technical Space'], leader: LEADERS['Nave B'], who: 'm10' })
-  groups.push({ names: ['Door X3', 'Door X4', 'Door X5', 'Main Gate'], leader: LEADERS.Doors, who: 'm7' })
-  groups.push({ names: DOORS.filter((d) => d.ref.startsWith('D')).map((d) => `Door ${d.ref}`), leader: LEADERS.Doors, who: 'm5' })
-  groups.push({ names: ['Door X1', 'Door X2', 'Door M1', 'Door M2', 'Door M3', 'Covered Walkway', 'Rotunda'], leader: LEADERS.Doors })
+  groups.push({ names: ['Altar & Pulpit', 'Councillors', "Apostle's Chairs", 'Protocol Row', 'Worship Team', 'Technical Space', 'Media Desk 1', 'Technical Desk', 'Media Desk 2'], leader: LEADERS['Nave B'], who: 'm10' })
+  groups.push({ names: ['Door P13', 'Door P12', 'Door P11', 'Door P10', 'Main Gate'], leader: LEADERS.Doors, who: 'm7' })
+  groups.push({ names: DOORS.filter((d) => d.ref.startsWith('C')).map((d) => `Door ${d.ref}`), leader: LEADERS.Doors, who: 'm5' })
+  groups.push({ names: ['Door X1', 'Door X2', 'Door SE2', 'Door SE3', 'Door SE4', 'Covered Walkway', 'Rotunda'], leader: LEADERS.Doors })
   groups.push({ names: ['Registration Area', 'Car Park', 'Overflow', 'First Aid Point'], leader: LEADERS.Doors })
   let ci = 13
   for (const g of groups) {
@@ -218,8 +230,9 @@ export function createSeed(): SeedState {
       const z = zone(`s${n}`, `Section ${n}`, 'section', `S${n}`)
       if (hasSpots(n))
         SPOTS.forEach((sp, i) => positions.push({ id: `${z.id}_${sp.key}`, name: sp.name, zoneId: z.id, order: i, required: 1, spot: sp.key, duty: 'seat' }))
-      else addPos(z, [SPOTLESS_POSITIONS[n]])
+      else addPos(z, BACK_SECTION_POSITIONS)
     }
+    for (const ns of NAMED_SECTIONS) addPos(zone(`ns_${ns.ref.toLowerCase()}`, ns.name, 'section', ns.ref), NAMED_SECTION_POSITIONS[ns.style])
     for (const d of DOORS) addPos(zone(`d${d.ref}`, `Door ${d.ref}`, 'door', d.ref), DOOR_POSITIONS[d.kind])
     AREA_ZONES.forEach((ar, i) => addPos(zone(`z${i}`, ar.name, 'area', ar.ref), ar.positions))
   }
@@ -246,7 +259,7 @@ export function createSeed(): SeedState {
 
   const fill: Record<string, number> = {
     'Aisle 1': 0.9, 'Aisle 7': 0.8, 'Aisle 9': 0.9,
-    Overflow: 0.6, 'Car Park': 0.7, 'First Aid Point': 0.75, 'Registration Area': 0.8, 'Door X2': 0.5, 'Door D7': 0.5,
+    Overflow: 0.6, 'Car Park': 0.7, 'First Aid Point': 0.75, 'Registration Area': 0.8, 'Door X2': 0.5, 'Door C3': 0.5,
   }
   const shortSections = [72, 73, 74, 83, 82, 81, 60, 61, 71, 70, 59, 47, 52, 36, 43, 29, 64, 66, 55]
   shortSections.forEach((n, i) => (fill[`Section ${n}`] = [0.5, 0.75, 0.5, 0.75, 0.25][i % 5]))
@@ -286,7 +299,7 @@ export function createSeed(): SeedState {
   copySession('ev_tga26_d3am', 0.6, () => 'assigned')
 
   // Daniel's other sessions
-  add('m1', 'ev_tga26_d1pm', posOf('ev_tga26_d1pm', 'Door X4', 'Greeter'))
+  add('m1', 'ev_tga26_d1pm', posOf('ev_tga26_d1pm', 'Door P12', 'Greeter'))
   add('m4', 'ev_tga26_d1pm', posOf('ev_tga26_d1pm', 'Section 41', 'Back row, right end'), false, 'assigned')
   add('m3', 'ev_tga26_d1pm', posOf('ev_tga26_d1pm', 'Section 41', 'Front row, right end'))
   add('m1', 'ev_tga26_d2am', posOf('ev_tga26_d2am', 'Section 41', 'Front row, left end'), false, 'assigned')
@@ -341,7 +354,7 @@ export function createSeed(): SeedState {
     { id: 'ac3', actor: 'Admin', text: 'imported 56 members from members-nov.csv', at: ago(60 * 3), kind: 'import' },
     { id: 'ac4', actor: 'Admin', text: 'gave John Adewale Sections 40 to 43', at: ago(60 * 7), kind: 'team' },
     { id: 'ac5', actor: 'Admin', text: 'published the TGA Day 1 and Day 2 rosters', at: ago(60 * 26), kind: 'publish' },
-    { id: 'ac6', actor: 'Samuel', text: 'moved 4 greeters from the Main Gate to Door X3', at: ago(60 * 30), kind: 'assign' },
+    { id: 'ac6', actor: 'Samuel', text: 'moved 4 greeters from the Main Gate to Door P13', at: ago(60 * 30), kind: 'assign' },
   ]
   const notifications: AppNotification[] = [
     { id: 'n1', title: 'Ushers who can’t make it', body: `${away} ushers said they can’t make TGA Day 1 morning. Their spots are open for cover.`, at: ago(9), tone: 'warn', read: false },

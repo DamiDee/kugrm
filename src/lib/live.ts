@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useStore } from '@/store/useStore'
 import { toast } from '@/components/ui/Toast'
 import type { Assignment, FallbackKeyResponse, Member, MinistryEvent, Position, Zone } from '@/data/types'
+import { SPOTS } from '@/data/venue'
 import { LIVE, api, ApiError, setOnSignedOut, setOnTeamSignedOut, tokens } from './api'
 import { normalizePhone } from './utils'
 import { coordinatorsFor, leadersForMember, leadersForZone, type LookupResult } from './selectors'
@@ -31,10 +32,13 @@ async function allPages<T>(path: string, query: Record<string, string | number> 
 /* ---------- mapping ---------- */
 
 const toZone = (z: any, eventId: string): Zone => ({ id: z.id, name: z.name, eventId: z.eventId ?? eventId, kind: z.kind, order: z.order ?? 0, mapRef: z.mapRef ?? undefined })
-const toPosition = (p: any, zoneId: string): Position => ({
-  id: p.id, name: p.name, zoneId: p.zoneId ?? zoneId, order: p.order ?? 0, isLeadRole: p.isLeadRole ?? undefined,
-  required: p.required ?? undefined, spot: p.spot ?? undefined, duty: p.duty ?? undefined,
-})
+const toPosition = (p: any, zoneId: string): Position => {
+  const inferredSpot = p.spot ?? SPOTS.find((s) => s.name.toLowerCase() === String(p.name ?? '').trim().toLowerCase())?.key
+  return {
+    id: p.id, name: p.name, zoneId: p.zoneId ?? zoneId, order: p.order ?? 0, isLeadRole: p.isLeadRole ?? undefined,
+    required: p.required ?? undefined, spot: inferredSpot ?? undefined, duty: p.duty ?? undefined,
+  }
+}
 const toAssignment = (a: any, eventId: string): Assignment => ({
   id: a.id, memberId: a.memberId ?? a.member?.id, eventId: a.eventId ?? eventId, zoneId: a.zoneId, positionId: a.positionId,
   isTeamLead: !!a.isTeamLead, status: a.status, unavailableReason: a.unavailableReason ?? undefined, updatedAt: a.updatedAt ?? '',

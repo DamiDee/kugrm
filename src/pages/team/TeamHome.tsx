@@ -176,9 +176,10 @@ function Stats({ rosters }: { rosters: ZoneRoster[] }) {
 }
 
 function TeamMap({ data, rosters, memberMap, onSelect }: { data: EventData; rosters: ZoneRoster[]; memberMap: Map<string, Member>; onSelect?: (zoneId: string) => void }) {
-  const zones = rosters.map((r) => r.zone)
-  const ids = zones.map((z) => z.id)
-  const idSet = new Set(ids)
+  const rosterZones = rosters.map((r) => r.zone)
+  const rosterNames = new Set(rosterZones.map((z) => z.name))
+  const zones = [...rosterZones, ...data.zones.filter((z) => !rosterNames.has(z.name))]
+  const ids = rosterZones.map((z) => z.id)
   const info = Object.fromEntries(
     rosters.map((r) => {
       const coverage = r.required ? Math.min(100, Math.round((r.assigned / r.required) * 100)) : r.assigned ? 100 : 0
@@ -194,9 +195,9 @@ function TeamMap({ data, rosters, memberMap, onSelect }: { data: EventData; rost
       ]
     }),
   )
-  const positions = positionsOf(data).filter((p) => idSet.has(p.zoneId))
+  const positions = positionsOf(data)
   const occupants = spotOccupants(data, memberMap, ids)
-  const uncovered = Object.fromEntries(Object.entries(uncoveredSpots(data, memberMap)).filter(([pid]) => positions.some((p) => p.id === pid)))
+  const uncovered = uncoveredSpots(data, memberMap)
   return (
     <section className="surface p-4 sm:p-5" aria-label="Your zones on the floor plan">
       <VenueMap zones={zones} mode="coverage" info={info} positions={positions} occupants={occupants} uncovered={uncovered} onSelect={onSelect} />

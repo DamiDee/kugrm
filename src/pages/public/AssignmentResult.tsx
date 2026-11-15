@@ -245,7 +245,7 @@ function Found({ view }: { view: AssignmentView }) {
             <p className="text-sm text-ink-500">{current.position.spot ? 'Your usher seat is marked on the floor plan.' : `${current.zone.name} is highlighted on the floor plan.`}</p>
           </div>
         </div>
-        <VenueMap zones={eventZones} mode="locate" highlightZoneId={current.zone.id} highlightPositionId={current.position.id} info={mapInfo} positions={mapPositions} occupants={occupants} hideLegend pinLabel={current.position.spot ? 'You stand here' : `You · ${current.position.name}`} />
+        <VenueMap zones={eventZones} mode="locate" highlightZoneId={current.zone.id} highlightPositionId={current.position.id} info={mapInfo} positions={mapPositions} occupants={occupants} pinLabel={current.position.spot ? 'You stand here' : `You · ${current.position.name}`} />
       </motion.section>
 
       {current.event.instructions && (

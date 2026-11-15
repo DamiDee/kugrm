@@ -360,6 +360,6 @@ export const useStore = create<State>()(
     }),
     LIVE
       ? { name: 'grm-live-v1', storage: createJSONStorage(() => safeStorage), version: 1, partialize: (s) => ({ admin: s.admin }) as unknown as State }
-      : { name: 'grm-store-v4', storage: createJSONStorage(() => safeStorage), version: 1 },
+      : { name: 'grm-store-v5', storage: createJSONStorage(() => safeStorage), version: 1 },
   ),
 )

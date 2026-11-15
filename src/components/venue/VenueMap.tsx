@@ -3,8 +3,8 @@ import { motion } from 'framer-motion'
 import { Crosshair, Maximize2, Minus, Plus, RotateCw, Search } from 'lucide-react'
 import type { Position, Zone } from '@/data/types'
 import {
-  AISLE_BADGE_X, AISLE_COUNT, AREAS, DOORS, DOOR_KIND_LABEL, FRONT_AISLE, LANE_AISLES, NAMED_SECTIONS, NAVES, PILLAR_X, PLAN, SECTION_COUNT, SPOT_SECTION_MAX, TENT_ROWS,
-  aisleCenterY, aisleLabelCols, aisleRects, colCenterX, doorRect, doorRefOf, hasSpots, isOuterSection, namedOfRef, nearestEntrance, refRect, sectionOfRef, sectionRect, sectionStyle,
+  AISLE_BADGE_X, AISLE_COUNT, AREAS, DOORS, DOOR_KIND_LABEL, FRONT_AISLE, LANE_AISLES, NAMED_SECTIONS, NAVES, PILLAR_X, PLAN, SECTION_COUNT, SPOTS, SPOT_SECTION_MAX, TENT_ROWS,
+  aisleCenterY, aisleLabelCols, aisleRects, colCenterX, doorRect, doorRefOf, isOuterSection, namedOfRef, nearestEntrance, refRect, sectionRect, sectionStyle,
   spotPoint, tentLineY, zoneNote, zoneRef,
   type Door, type NamedStyle, type Rect,
 } from '@/data/venue'
@@ -18,10 +18,8 @@ import { cn } from '@/lib/utils'
  * areas (Councillors, Worship Team, Technical Space, Altar, Covered Walkway,
  * Stage Reserve).
  *
- * On wide screens it is drawn as on paper, altar to the right. On narrow
- * screens it turns so the altar is at the top, which fits a phone and matches
- * the view of someone standing at the back facing the altar. Pinch, drag,
- * double-tap or the buttons zoom and pan it.
+ * Rendered identically for Admins, Coordinators, Leaders, and Members using the
+ * official floor plan schematic and legend as the single source of truth.
  */
 
 export type MapMode = 'locate' | 'coverage' | 'plain'
@@ -71,7 +69,7 @@ function project(o: Orient) {
   return { rect, pt }
 }
 
-/* ---------- colours ---------- */
+/* ---------- colours (from the official schematic & legend) ---------- */
 
 const PLAIN: Record<ReturnType<typeof sectionStyle>, { fill: string; edge: string }> = {
   standard: { fill: '#2F5DD3', edge: '#1E3F9E' },
@@ -106,13 +104,6 @@ const AREA_COLOR: Record<string, { fill: string; edge: string; text: string }> =
   media2: { fill: '#FFF3E2', edge: '#E89B3C', text: '#D97706' },
   front: { fill: '#C5D3F0', edge: '#93ADE0', text: '#2B4AA6' },
 }
-
-function tone(c = 0) {
-  if (c >= 95) return { fill: '#A8D8BC', solid: '#2F7D57', edge: '#2F7D57', label: 'Fully staffed' }
-  if (c >= 85) return { fill: '#F0DCA6', solid: '#C59E4F', edge: '#A9822F', label: 'Nearly staffed' }
-  return { fill: '#EDB8C7', solid: '#93304E', edge: '#93304E', label: 'Needs ushers' }
-}
-const NO_ZONE = { fill: '#ECE8E1', edge: '#D6CFC3' }
 
 /* ---------- pan & zoom ---------- */
 
@@ -263,18 +254,50 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
   }, [zones])
   const refOf = useMemo(() => new Map([...byRef.entries()].map(([r, z]) => [z.id, r])), [byRef])
 
-  /** usher spots: section positions that stand at a corner of their section */
+  /**
+   * Usher seats: all 72 sections (1–72, including 5, 6, 7, 17, 18) ALWAYS have
+   * 4 corner usher seats (FL, FR, BL, BR) as shown on the schematic. If the
+   * event's positions list has a matching position for that corner, we link it.
+   */
   const spots = useMemo(() => {
-    const out: { positionId: string; zoneId: string; zoneName: string; name: string; x: number; y: number }[] = []
+    const posByZoneSpot = new Map<string, Position>()
+    const firstPosByZone = new Map<string, Position>()
     for (const p of positions ?? []) {
-      if (!p.spot) continue
-      const ref = refOf.get(p.zoneId)
-      const n = sectionOfRef(ref)
-      if (!n || !hasSpots(n)) continue
-      out.push({ positionId: p.id, zoneId: p.zoneId, zoneName: byRef.get(ref!)!.name, name: p.name, ...spotPoint(n, p.spot) })
+      if (!firstPosByZone.has(p.zoneId)) firstPosByZone.set(p.zoneId, p)
+      const spotKey = p.spot ?? SPOTS.find((s) => s.name.toLowerCase() === p.name.trim().toLowerCase())?.key
+      if (spotKey) posByZoneSpot.set(`${p.zoneId}_${spotKey}`, p)
+    }
+    const out: {
+      key: string
+      positionId?: string
+      fallbackPositionId?: string
+      zoneId?: string
+      zoneName: string
+      name: string
+      x: number
+      y: number
+    }[] = []
+    for (let n = 1; n <= SPOT_SECTION_MAX; n++) {
+      const ref = `S${n}`
+      const z = byRef.get(ref)
+      const zoneName = z?.name ?? `Section ${n}`
+      const fallback = z ? firstPosByZone.get(z.id) : undefined
+      for (const sp of SPOTS) {
+        const p = z ? posByZoneSpot.get(`${z.id}_${sp.key}`) : undefined
+        out.push({
+          key: p?.id ?? `${ref}_${sp.key}`,
+          positionId: p?.id,
+          fallbackPositionId: fallback?.id,
+          zoneId: z?.id,
+          zoneName,
+          name: p?.name ?? sp.name,
+          ...spotPoint(n, sp.key),
+        })
+      }
     }
     return out
-  }, [positions, refOf, byRef])
+  }, [positions, byRef])
+
   const mySpot = highlightPositionId ? spots.find((s) => s.positionId === highlightPositionId) : undefined
 
   const focusId = highlightZoneId ?? selectedZoneId
@@ -333,26 +356,10 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
   /* --- look of each plan item --- */
   const zoneFor = (ref: string) => byRef.get(ref)
   const isFocus = (ref: string) => !!focusId && refOf.get(focusId) === ref
-  const dim = (ref: string) => mode === 'locate' && !isFocus(ref)
-  const coverageOf = (ref: string) => {
-    const z = zoneFor(ref)
-    return z ? info[z.id]?.coverage ?? 0 : undefined
-  }
-  const sectionColors = (n: number) => {
-    const ref = `S${n}`
-    if (mode === 'locate' && isFocus(ref)) return { fill: '#93304E', edge: '#5E1A30' }
-    if (mode === 'coverage' && !zoneFor(ref)) return NO_ZONE
-    return PLAIN[sectionStyle(n)]
-  }
-  const namedColors = (ref: string, style: NamedStyle) => {
-    if (mode === 'locate' && isFocus(ref)) return { fill: '#93304E', edge: '#5E1A30' }
-    if (mode === 'coverage' && !zoneFor(ref)) return NO_ZONE
-    return NAMED_PLAIN[style]
-  }
 
   const hit = (ref: string, label: string) => {
     const z = zoneFor(ref)
-    if (!z || !interactive) return { onMouseEnter: () => z && setHover(ref), onMouseLeave: () => setHover((h) => (h === ref ? null : h)) }
+    if (!z || !interactive) return { onMouseEnter: () => setHover(ref), onMouseLeave: () => setHover((h) => (h === ref ? null : h)) }
     const zi = info[z.id]
     return {
       role: 'button',
@@ -374,7 +381,7 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
     return <rect x={s.x} y={s.y} width={s.w} height={s.h} {...props} />
   }
 
-  const hoveredSpot = hoverSpot ? spots.find((s) => s.positionId === hoverSpot) : undefined
+  const hoveredSpot = hoverSpot ? spots.find((s) => s.key === hoverSpot) : undefined
   const activeRef = hover ?? (focusId ? refOf.get(focusId) : undefined)
   const activeZone = activeRef ? zoneFor(activeRef) : undefined
   const highlightRef = highlightZoneId ? refOf.get(highlightZoneId) : undefined
@@ -403,8 +410,8 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
               <pattern id="grm-seats" width="10.2" height="6.5" patternUnits="userSpaceOnUse" patternTransform={orient === 'portrait' ? 'rotate(90)' : undefined}>
                 <path d="M9.7 0V6.5M0 6H10.2" stroke="#FFFFFF" strokeOpacity=".55" strokeWidth="1" />
               </pattern>
-              <pattern id="grm-seats-named" width="12.8" height="6.5" patternUnits="userSpaceOnUse" patternTransform={orient === 'portrait' ? 'rotate(90)' : undefined}>
-                <path d="M12.2 0V6.5M0 6H12.8" stroke="#FFFFFF" strokeOpacity=".55" strokeWidth="1" />
+              <pattern id="grm-seats-named" width="11.6" height="6.5" patternUnits="userSpaceOnUse" patternTransform={orient === 'portrait' ? 'rotate(90)' : undefined}>
+                <path d="M11.1 0V6.5M0 6H11.6" stroke="#FFFFFF" strokeOpacity=".55" strokeWidth="1" />
               </pattern>
               <pattern id="grm-seats-stage" width="8.5" height="6" patternUnits="userSpaceOnUse" patternTransform={orient === 'portrait' ? 'rotate(90)' : undefined}>
                 <path d="M8 0V6M0 5.5H8.5" stroke="#FFFFFF" strokeOpacity=".6" strokeWidth="0.9" />
@@ -415,7 +422,7 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
             <g pointerEvents="none">
               {(() => {
                 const B = PLAN.building
-                const a = P.pt(B.x, 28), b = P.pt(B.x + B.w, 28)
+                const a = P.pt(B.x, 24), b = P.pt(B.x + B.w, 24)
                 const c = P.pt(14, B.y), d = P.pt(14, B.y + B.h)
                 const tick = (x: number, y: number, vertical: boolean) => {
                   const q = vertical ? P.pt(x, y - 7) : P.pt(x - 7, y)
@@ -425,14 +432,14 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
                 return (
                   <>
                     <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#9AA3B5" strokeWidth={1.5} />
-                    {tick(B.x, 28, true)}{tick(B.x + B.w, 28, true)}
+                    {tick(B.x, 24, true)}{tick(B.x + B.w, 24, true)}
                     <line x1={c.x} y1={c.y} x2={d.x} y2={d.y} stroke="#9AA3B5" strokeWidth={1.5} />
                     {tick(14, B.y, false)}{tick(14, B.y + B.h, false)}
                   </>
                 )
               })()}
-              {(() => { const p = P.pt(B_MID_X, 28); return <rect x={p.x - 34} y={p.y - 11} width={68} height={22} fill="#F4F6FA" transform={orient === 'portrait' ? `rotate(-90 ${p.x} ${p.y})` : undefined} /> })()}
-              <Txt o={orient} x={B_MID_X} y={28} size={14} weight={600} fill="#374151" port={-90}>105 m</Txt>
+              {(() => { const p = P.pt(B_MID_X, 24); return <rect x={p.x - 34} y={p.y - 11} width={68} height={22} fill="#F4F6FA" transform={orient === 'portrait' ? `rotate(-90 ${p.x} ${p.y})` : undefined} /> })()}
+              <Txt o={orient} x={B_MID_X} y={24} size={14} weight={600} fill="#374151" port={-90}>105 m</Txt>
               {(() => { const p = P.pt(14, B_MID_Y); return <rect x={p.x - 11} y={p.y - 26} width={22} height={52} fill="#F4F6FA" transform={orient === 'portrait' ? `rotate(-90 ${p.x} ${p.y})` : undefined} /> })()}
               <Txt o={orient} x={14} y={B_MID_Y} size={14} weight={600} fill="#374151" land={-90}>90 m</Txt>
             </g>
@@ -445,15 +452,12 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
             {(() => {
               const ref = 'front'
               const focus = isFocus(ref)
-              const lit = focus && mode === 'locate'
-              const fill = lit ? '#93304E' : '#C5D3F0'
-              const txt = lit ? '#FFFFFF' : '#2B4AA6'
               return (
-                <g {...hit(ref, 'Front Aisle')} opacity={dim(ref) ? 0.5 : 1}>
+                <g {...hit(ref, 'Front Aisle')}>
                   {/* connection up to door P10 */}
-                  {R({ x: FRONT_AISLE.x - 4, y: PLAN.building.y + 3, w: FRONT_AISLE.w + 8, h: FRONT_AISLE.y - PLAN.building.y + 4 }, { fill, pointerEvents: 'none' })}
-                  {R(FRONT_AISLE, { fill, stroke: focus || hover === ref ? '#111827' : 'none', strokeWidth: 2.5 })}
-                  <Txt o={orient} x={FRONT_AISLE.x + FRONT_AISLE.w / 2} y={642} size={11} weight={800} fill={txt} land={-90} port={0} spacing={0.8}>FRONT AISLE</Txt>
+                  {R({ x: FRONT_AISLE.x - 4, y: PLAN.building.y + 3, w: FRONT_AISLE.w + 8, h: FRONT_AISLE.y - PLAN.building.y + 4 }, { fill: '#C5D3F0', pointerEvents: 'none' })}
+                  {R(FRONT_AISLE, { fill: '#C5D3F0', stroke: focus || hover === ref ? '#111827' : 'none', strokeWidth: 2.5 })}
+                  <Txt o={orient} x={FRONT_AISLE.x + FRONT_AISLE.w / 2} y={642} size={11.5} weight={800} fill="#2B4AA6" land={90} port={0} spacing={0.8}>FRONT AISLE</Txt>
                 </g>
               )
             })()}
@@ -462,15 +466,12 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
             {Array.from({ length: AISLE_COUNT }, (_, i) => i + 1).map((n) => {
               const ref = `A${n}`
               const rects = aisleRects(n)
-              const z = zoneFor(ref)
               const focus = isFocus(ref)
               const lane = LANE_AISLES.includes(n)
-              const c = mode === 'coverage' && z ? tone(coverageOf(ref)).solid : undefined
-              const fill = focus && mode === 'locate' ? '#93304E' : lane ? '#A9BDEB' : '#C5D3F0'
+              const fill = lane ? '#A9BDEB' : '#C5D3F0'
               const cy = aisleCenterY(n)
-              const txt = focus && mode === 'locate' ? '#FFFFFF' : '#2B4AA6'
               return (
-                <g key={ref} {...hit(ref, `Aisle ${n}`)} opacity={dim(ref) ? 0.5 : 1}>
+                <g key={ref} {...hit(ref, `Aisle ${n}`)}>
                   {rects.map((r, i) => (
                     <g key={i}>
                       {R({ x: r.x, y: r.y - 4, w: r.w, h: r.h + 8 }, { fill: 'transparent' })}
@@ -478,14 +479,14 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
                     </g>
                   ))}
                   {aisleLabelCols(n).map((col) => (
-                    <Txt o={orient} key={col} x={colCenterX(col)} y={cy} size={11} fill={txt} land={0} port={-90} spacing={0.4}>AISLE {n}</Txt>
+                    <Txt o={orient} key={col} x={colCenterX(col, n)} y={cy} size={11} fill="#2B4AA6" land={0} port={-90} spacing={0.4}>AISLE {n}</Txt>
                   ))}
                   {(() => {
                     const p = P.pt(AISLE_BADGE_X, cy)
                     return (
                       <g>
                         <circle cx={p.x} cy={p.y} r={20} fill="transparent" />
-                        <circle cx={p.x} cy={p.y} r={11.5} fill={focus && mode === 'locate' ? '#93304E' : c ?? '#0B0D12'} stroke="#FFFFFF" strokeWidth={2} />
+                        <circle cx={p.x} cy={p.y} r={11.5} fill="#0B0D12" stroke="#FFFFFF" strokeWidth={2} />
                       </g>
                     )
                   })()}
@@ -500,7 +501,7 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
               const a = P.pt(PILLAR_X[0], y)
               const b = P.pt(PILLAR_X[PILLAR_X.length - 1], y)
               return (
-                <g key={row} pointerEvents="none" opacity={mode === 'locate' ? 0.6 : 1}>
+                <g key={row} pointerEvents="none">
                   {R({ x: PLAN.seating.x, y: y - 10, w: PLAN.seating.w, h: 20 }, { fill: '#EEF1F6' })}
                   <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#2A2E36" strokeWidth="1.5" strokeDasharray="7 6" />
                   {PILLAR_X.map((x) => {
@@ -521,39 +522,31 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
             {Array.from({ length: SECTION_COUNT }, (_, i) => i + 1).map((n) => {
               const ref = `S${n}`
               const r = sectionRect(n)
-              const col = sectionColors(n)
+              const col = PLAIN[sectionStyle(n)]
               const focus = isFocus(ref)
-              const lit = mode === 'locate' && focus
               const edgeOn = focus || hover === ref
-              const badge = mode === 'coverage' && zoneFor(ref) ? tone(coverageOf(ref)).solid : '#0B0D12'
               const cx = r.x + r.w / 2
               const cy = r.y + r.h / 2
-              // shift section badge away from the in-hall media & technical desks
-              const shiftX = (n === 54 || n === 55) ? -9 : (n === 42 || n === 43) ? 9 : (n === 30 || n === 31) ? -10 : (n === 18 || n === 19) ? 10 : 0
-              const numX = cx + shiftX
               const narrow = n > SPOT_SECTION_MAX
               const rad = narrow ? 14.5 : 16.5
               return (
-                <g key={ref} {...hit(ref, `Section ${n}`)} opacity={dim(ref) ? 0.42 : 1}>
+                <g key={ref} {...hit(ref, `Section ${n}`)}>
                   {isOuterSection(n) && R({ x: r.x - 3, y: r.y - 4, w: r.w + 6, h: r.h + 8 }, { fill: 'none', stroke: '#F08A1C', strokeWidth: 1.6, strokeDasharray: '5 4', pointerEvents: 'none' })}
                   {R(r, { fill: col.fill, stroke: edgeOn ? '#111827' : col.edge, strokeWidth: edgeOn ? 4 : 1.5, rx: 2 })}
-                  {R({ x: r.x + 2.5, y: r.y + 2.5, w: r.w - 5, h: r.h - 5 }, { fill: 'url(#grm-seats)', pointerEvents: 'none', opacity: lit ? 0.5 : 1 })}
+                  {R({ x: r.x + 2.5, y: r.y + 2.5, w: r.w - 5, h: r.h - 5 }, { fill: 'url(#grm-seats)', pointerEvents: 'none' })}
                   {(() => {
-                    const p = P.pt(numX, cy)
-                    return <circle cx={p.x} cy={p.y} r={rad} fill={lit ? '#FFFFFF' : badge} stroke="#FFFFFF" strokeWidth={lit ? 0 : 1.5} pointerEvents="none" />
+                    const p = P.pt(cx, cy)
+                    return <circle cx={p.x} cy={p.y} r={rad} fill="#0B0D12" stroke="#FFFFFF" strokeWidth={1.5} pointerEvents="none" />
                   })()}
-                  <Txt o={orient} x={numX} y={cy} size={narrow ? 15 : 16.5} weight={800} fill={lit ? '#93304E' : '#FFFFFF'}>{n}</Txt>
+                  <Txt o={orient} x={cx} y={cy} size={narrow ? 15 : 16.5} weight={800} fill="#FFFFFF">{n}</Txt>
                 </g>
               )
             })}
 
-            {/* in-hall media & technical desks (drawn over section inner edges, as on the schematic) */}
+            {/* in-hall media & technical desks */}
             {deskAreas.map((a) => {
-              const z = zoneFor(a.ref)
               const focus = isFocus(a.ref)
               const c = AREA_COLOR[a.ref]
-              const lit = focus && mode === 'locate'
-              const cov = mode === 'coverage' && z ? tone(coverageOf(a.ref)) : undefined
               const r = a.rect
               const cx = r.x + r.w / 2
               const cy = r.y + r.h / 2
@@ -561,17 +554,16 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
               const isMedia = a.ref === 'media1' || a.ref === 'media2'
               const wide = a.ref === 'media1'
               return (
-                <g key={a.ref} {...hit(a.ref, a.name)} opacity={dim(a.ref) ? 0.5 : 1}>
-                  {R(r, { fill: lit ? '#93304E' : c.fill, stroke: edge, strokeWidth: focus || hover === a.ref ? 3.5 : 2, rx: 6 })}
+                <g key={a.ref} {...hit(a.ref, a.name)}>
+                  {R(r, { fill: c.fill, stroke: edge, strokeWidth: focus || hover === a.ref ? 3.5 : 2, rx: 6 })}
                   {isMedia ? (
                     <>
-                      <Txt o={orient} x={wide ? cx - 6 : cx - 4} y={cy} size={wide ? 16 : 12.5} weight={800} land={-90} port={0} fill={lit ? '#FFFFFF' : '#E8831A'} spacing={0.5}>MEDIA</Txt>
-                      <Txt o={orient} x={wide ? cx + 9 : cx + 6} y={cy} size={wide ? 10 : 8} weight={500} land={-90} port={0} fill={lit ? '#FFFFFF' : '#4B5263'}>videography</Txt>
+                      <Txt o={orient} x={wide ? cx - 6 : cx - 4} y={cy} size={wide ? 16 : 12.5} weight={800} land={-90} port={0} fill="#E8831A" spacing={0.5}>MEDIA</Txt>
+                      <Txt o={orient} x={wide ? cx + 9 : cx + 6} y={cy} size={wide ? 10 : 8} weight={500} land={-90} port={0} fill="#4B5263">videography</Txt>
                     </>
                   ) : (
-                    <Txt o={orient} x={cx} y={cy} size={13} weight={800} land={-90} port={0} fill={lit ? '#FFFFFF' : '#111318'} spacing={0.5}>TECHNICAL</Txt>
+                    <Txt o={orient} x={cx} y={cy} size={13} weight={800} land={-90} port={0} fill="#111318" spacing={0.5}>TECHNICAL</Txt>
                   )}
-                  {cov && (() => { const q = P.rect(r); return <circle cx={q.x + q.w / 2} cy={q.y + 12} r={7} fill={cov.solid} stroke="#FFFFFF" strokeWidth={2} pointerEvents="none" /> })()}
                 </g>
               )
             })}
@@ -579,55 +571,57 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
             {/* named front sections (5 rows each: Sierra down to Xray) */}
             {NAMED_SECTIONS.map((ns) => {
               const r = ns.rect
-              const col = namedColors(ns.ref, ns.style)
+              const col = NAMED_PLAIN[ns.style]
               const focus = isFocus(ns.ref)
-              const lit = mode === 'locate' && focus
               const edgeOn = focus || hover === ns.ref
-              const cov = mode === 'coverage' && zoneFor(ns.ref) ? tone(coverageOf(ns.ref)).solid : undefined
-              const seatW = 64
+              const seatW = 58
               const seatRect: Rect = { x: r.x, y: r.y, w: seatW, h: r.h }
-              const tagRect: Rect = { x: r.x + seatW + 3, y: r.y + 5, w: 19, h: r.h - 10 }
+              const tagRect: Rect = { x: r.x + seatW + 2, y: r.y + 5, w: 18, h: r.h - 10 }
               const cy = r.y + r.h / 2
               const tagCx = tagRect.x + tagRect.w / 2
               return (
-                <g key={ns.ref} {...hit(ns.ref, `${ns.name} Section`)} opacity={dim(ns.ref) ? 0.42 : 1}>
+                <g key={ns.ref} {...hit(ns.ref, `${ns.name} Section`)}>
                   {R(seatRect, { fill: col.fill, stroke: edgeOn ? '#111827' : col.edge, strokeWidth: edgeOn ? 3.5 : 1.5, rx: 2 })}
-                  {R({ x: seatRect.x + 2, y: seatRect.y + 2, w: seatRect.w - 4, h: seatRect.h - 4 }, { fill: 'url(#grm-seats-named)', pointerEvents: 'none', opacity: lit ? 0.5 : 1 })}
+                  {R({ x: seatRect.x + 2, y: seatRect.y + 2, w: seatRect.w - 4, h: seatRect.h - 4 }, { fill: 'url(#grm-seats-named)', pointerEvents: 'none' })}
 
                   {/* special front-row strips & pills on Echo, Delta, Charlie, Bravo */}
-                  {ns.ref === 'ECHO' && !lit && (
+                  {ns.ref === 'ECHO' && (
                     <>
-                      {R({ x: seatRect.x + seatRect.w - 17, y: r.y + 6, w: 15, h: r.h - 12 }, { fill: '#FFFFFF', stroke: '#B3204A', strokeWidth: 1.2, rx: 7, pointerEvents: 'none' })}
-                      <Txt o={orient} x={seatRect.x + seatRect.w - 9.5} y={cy} size={9.5} weight={700} land={-90} port={0} fill="#B3204A">Lady Sandra’s</Txt>
+                      {R({ x: seatRect.x + seatRect.w - 17, y: r.y + 6, w: 15, h: r.h - 12 }, { fill: '#FFFFFF', stroke: '#B3204A', strokeWidth: 1.2, rx: 6, pointerEvents: 'none' })}
+                      <Txt o={orient} x={seatRect.x + seatRect.w - 9.5} y={cy} size={9.5} weight={700} land={90} port={0} fill="#B3204A">Lady Sandra’s</Txt>
                     </>
                   )}
-                  {ns.ref === 'DELTA' && !lit && (
-                    R({ x: seatRect.x + seatRect.w - 13, y: r.y + 1.5, w: 12, h: r.h - 3 }, { fill: '#BCEEFF', stroke: '#17A2B8', strokeWidth: 1.5, rx: 1.5, pointerEvents: 'none' })
-                  )}
-                  {ns.ref === 'CHARLIE' && !lit && (
+                  {ns.ref === 'DELTA' && (
                     <>
-                      {R({ x: seatRect.x + seatRect.w - 23, y: r.y + 5, w: 21, h: r.h - 10 }, { fill: '#FFFFFF', stroke: '#15171B', strokeWidth: 1.2, rx: 6, pointerEvents: 'none' })}
-                      <Txt o={orient} x={seatRect.x + seatRect.w - 16} y={cy} size={8.5} weight={700} land={-90} port={0} fill="#111318">Select</Txt>
-                      <Txt o={orient} x={seatRect.x + seatRect.w - 8} y={cy} size={8.5} weight={700} land={-90} port={0} fill="#111318">Contemporaries</Txt>
+                      {R({ x: seatRect.x + seatRect.w - 12, y: r.y + 1.5, w: 11, h: r.h - 3 }, { fill: '#BCEEFF', stroke: '#17A2B8', strokeWidth: 1.5, rx: 1.5, pointerEvents: 'none' })}
+                      {R({ x: seatRect.x + seatRect.w - 12, y: r.y + 2, w: 11, h: r.h - 4 }, { fill: 'url(#grm-seats-named)', pointerEvents: 'none' })}
                     </>
                   )}
-                  {ns.ref === 'BRAVO' && !lit && (
+                  {ns.ref === 'CHARLIE' && (
                     <>
-                      {R({ x: seatRect.x + seatRect.w - 23, y: r.y + 4, w: 21, h: r.h - 8 }, { fill: '#FFFFFF', stroke: '#1E7A39', strokeWidth: 1.2, rx: 6, pointerEvents: 'none' })}
-                      <Txt o={orient} x={seatRect.x + seatRect.w - 16} y={cy} size={8.5} weight={800} land={-90} port={0} fill="#14532D">MPFs &</Txt>
-                      <Txt o={orient} x={seatRect.x + seatRect.w - 8} y={cy} size={8.5} weight={800} land={-90} port={0} fill="#14532D">Leaders</Txt>
+                      {R({ x: seatRect.x + seatRect.w - 22, y: r.y + 5, w: 20, h: r.h - 10 }, { fill: '#FFFFFF', stroke: '#15171B', strokeWidth: 1.2, rx: 6, pointerEvents: 'none' })}
+                      <Txt o={orient} x={seatRect.x + seatRect.w - 8.5} y={cy} size={8.5} weight={700} land={90} port={0} fill="#111318">Select</Txt>
+                      <Txt o={orient} x={seatRect.x + seatRect.w - 16} y={cy} size={8.5} weight={700} land={90} port={0} fill="#111318">Contemporaries</Txt>
+                    </>
+                  )}
+                  {ns.ref === 'BRAVO' && (
+                    <>
+                      {R({ x: seatRect.x + seatRect.w - 12, y: r.y + 1.5, w: 11, h: r.h - 3 }, { fill: '#CCF0D6', stroke: '#1E7A39', strokeWidth: 1.2, rx: 1.5, pointerEvents: 'none' })}
+                      {R({ x: seatRect.x + seatRect.w - 22, y: r.y + 4, w: 20, h: r.h - 8 }, { fill: '#FFFFFF', stroke: '#1E7A39', strokeWidth: 1.2, rx: 6, pointerEvents: 'none' })}
+                      <Txt o={orient} x={seatRect.x + seatRect.w - 8.5} y={cy} size={8.5} weight={800} land={90} port={0} fill="#14532D">MPFs &</Txt>
+                      <Txt o={orient} x={seatRect.x + seatRect.w - 16} y={cy} size={8.5} weight={800} land={90} port={0} fill="#14532D">Leaders</Txt>
                     </>
                   )}
 
                   {/* black vertical section name tag */}
-                  {R(tagRect, { fill: lit ? '#93304E' : cov ?? '#0B0D12', stroke: edgeOn ? '#111827' : '#FFFFFF', strokeWidth: 1, rx: 4 })}
-                  <Txt o={orient} x={tagCx} y={cy} size={9.5} weight={800} land={-90} port={0} fill="#FFFFFF" spacing={0.4}>{ns.ref}</Txt>
+                  {R(tagRect, { fill: '#0B0D12', stroke: edgeOn ? '#111827' : '#FFFFFF', strokeWidth: 1, rx: 4 })}
+                  <Txt o={orient} x={tagCx} y={cy} size={9.5} weight={800} land={90} port={0} fill="#FFFFFF" spacing={0.4}>{ns.ref}</Txt>
 
                   {/* GLASS tag beside DELTA */}
                   {ns.ref === 'DELTA' && (
                     <>
-                      {R({ x: tagRect.x + tagRect.w + 2, y: r.y + 22, w: 15, h: r.h - 44 }, { fill: '#1F2430', rx: 3.5, pointerEvents: 'none' })}
-                      <Txt o={orient} x={tagRect.x + tagRect.w + 9.5} y={cy} size={8.5} weight={800} land={-90} port={0} fill="#FFFFFF" spacing={0.4}>GLASS</Txt>
+                      {R({ x: tagRect.x + tagRect.w + 2, y: r.y + 22, w: 15, h: r.h - 44 }, { fill: '#0B0D12', rx: 3.5, pointerEvents: 'none' })}
+                      <Txt o={orient} x={tagRect.x + tagRect.w + 9.5} y={cy} size={8.5} weight={800} land={90} port={0} fill="#FFFFFF" spacing={0.4}>GLASS</Txt>
                     </>
                   )}
                 </g>
@@ -636,8 +630,8 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
 
             {/* stage-side areas: councillors, worship team, technical space, altar, screen, apostle's chairs, covered walkway, stage reserve */}
             {/* purple walkway connector from door SE3 down through Councillors */}
-            <g pointerEvents="none" opacity={mode === 'locate' ? 0.55 : 1}>
-              {R({ x: 1274, y: 104, w: 86, h: 40 }, { fill: '#EFE6FF' })}
+            <g pointerEvents="none">
+              {R({ x: 1274, y: 104, w: 103, h: 40 }, { fill: '#EFE6FF' })}
               {R({ x: 1274, y: 104, w: 22, h: 166 }, { fill: '#EFE6FF' })}
               {/* 10 ft (3 m) spacing marker between Councillors and Worship Team */}
               {(() => {
@@ -650,102 +644,79 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
             </g>
 
             {stageAreas.map((a) => {
-              const z = zoneFor(a.ref)
               const focus = isFocus(a.ref)
               const c = AREA_COLOR[a.ref] ?? { fill: '#FFFFFF', edge: '#111318', text: '#111318' }
-              const lit = focus && mode === 'locate'
-              const cov = mode === 'coverage' && z ? tone(coverageOf(a.ref)) : undefined
-              const fill = lit ? '#93304E' : c.fill
               const r = a.rect
               const cx = r.x + r.w / 2
               const cy = r.y + r.h / 2
-              const txt = lit ? '#FFFFFF' : c.text
               const edge = focus || hover === a.ref ? '#111827' : c.edge
               const thick = focus || hover === a.ref ? 4 : 2.2
               return (
-                <g key={a.ref} {...hit(a.ref, a.name)} opacity={dim(a.ref) ? 0.5 : 1}>
-                  {a.ref === 'apostle' && R({ x: r.x - 4, y: r.y - 20, w: 36, h: r.h + 40 }, { fill: 'transparent' })}
+                <g key={a.ref} {...hit(a.ref, a.name)}>
+                  {a.ref === 'apostle' && R({ x: r.x - 4, y: r.y - 20, w: 26, h: r.h + 40 }, { fill: 'transparent' })}
                   {a.ref === 'screen' && R({ x: r.x - 4, y: r.y, w: r.w + 8, h: r.h }, { fill: 'transparent' })}
 
                   {a.ref === 'council' ? (
                     <>
-                      {R(r, { fill, stroke: edge, strokeWidth: thick, rx: 6 })}
-                      <Txt o={orient} x={cx} y={r.y + 12} size={10} weight={800} fill={txt} spacing={0.3}>COUNCILLORS · 120 (60 + 60)</Txt>
-                      {/* two 60-chair blocks with purple WALKWAY between them */}
-                      {!lit && (
-                        <>
-                          {R({ x: r.x + 8, y: r.y + 22, w: 72, h: r.h - 30 }, { fill: '#E0A82E', stroke: '#B87E14', strokeWidth: 1, rx: 2, pointerEvents: 'none' })}
-                          {R({ x: r.x + 8, y: r.y + 22, w: 72, h: r.h - 30 }, { fill: 'url(#grm-seats-stage)', pointerEvents: 'none' })}
-                          {R({ x: r.x + 82, y: r.y + 20, w: 22, h: r.h - 22 }, { fill: '#EFE6FF', pointerEvents: 'none' })}
-                          <Txt o={orient} x={r.x + 93} y={r.y + 22 + (r.h - 30) / 2} size={8} weight={800} land={-90} port={0} fill="#6D28D9" spacing={0.5}>WALKWAY</Txt>
-                          {R({ x: r.x + 106, y: r.y + 22, w: 71, h: r.h - 30 }, { fill: '#E0A82E', stroke: '#B87E14', strokeWidth: 1, rx: 2, pointerEvents: 'none' })}
-                          {R({ x: r.x + 106, y: r.y + 22, w: 71, h: r.h - 30 }, { fill: 'url(#grm-seats-stage)', pointerEvents: 'none' })}
-                        </>
-                      )}
+                      {R(r, { fill: c.fill, stroke: edge, strokeWidth: thick, rx: 6 })}
+                      <Txt o={orient} x={cx} y={r.y + 12} size={10} weight={800} fill={c.text} spacing={0.3}>COUNCILLORS · 120 (60 + 60)</Txt>
+                      {R({ x: r.x + 8, y: r.y + 22, w: 72, h: r.h - 30 }, { fill: '#E0A82E', stroke: '#B87E14', strokeWidth: 1, rx: 2, pointerEvents: 'none' })}
+                      {R({ x: r.x + 8, y: r.y + 22, w: 72, h: r.h - 30 }, { fill: 'url(#grm-seats-stage)', pointerEvents: 'none' })}
+                      {R({ x: r.x + 82, y: r.y + 20, w: 22, h: r.h - 22 }, { fill: '#EFE6FF', pointerEvents: 'none' })}
+                      <Txt o={orient} x={r.x + 93} y={r.y + 22 + (r.h - 30) / 2} size={8} weight={800} land={90} port={0} fill="#6D28D9" spacing={0.5}>WALKWAY</Txt>
+                      {R({ x: r.x + 106, y: r.y + 22, w: 71, h: r.h - 30 }, { fill: '#E0A82E', stroke: '#B87E14', strokeWidth: 1, rx: 2, pointerEvents: 'none' })}
+                      {R({ x: r.x + 106, y: r.y + 22, w: 71, h: r.h - 30 }, { fill: 'url(#grm-seats-stage)', pointerEvents: 'none' })}
                     </>
                   ) : a.ref === 'worship' ? (
                     <>
-                      {R(r, { fill, stroke: edge, strokeWidth: thick, rx: 6 })}
-                      <Txt o={orient} x={cx} y={r.y + 13} size={10} weight={800} fill={txt} spacing={0.3}>WORSHIP TEAM · 150 (75 + 75)</Txt>
-                      {!lit && (
-                        <>
-                          {R({ x: r.x + 18, y: r.y + 24, w: 62, h: r.h - 32 }, { fill: '#22A053', stroke: '#166534', strokeWidth: 1, rx: 2, pointerEvents: 'none' })}
-                          {R({ x: r.x + 18, y: r.y + 24, w: 62, h: r.h - 32 }, { fill: 'url(#grm-seats-stage)', pointerEvents: 'none' })}
-                          <Txt o={orient} x={r.x + 92} y={r.y + 24 + (r.h - 32) / 2} size={8.5} weight={800} land={-90} port={0} fill="#166534" spacing={0.5}>AISLE</Txt>
-                          {R({ x: r.x + 104, y: r.y + 24, w: 62, h: r.h - 32 }, { fill: '#22A053', stroke: '#166534', strokeWidth: 1, rx: 2, pointerEvents: 'none' })}
-                          {R({ x: r.x + 104, y: r.y + 24, w: 62, h: r.h - 32 }, { fill: 'url(#grm-seats-stage)', pointerEvents: 'none' })}
-                        </>
-                      )}
+                      {R(r, { fill: c.fill, stroke: edge, strokeWidth: thick, rx: 6 })}
+                      <Txt o={orient} x={cx} y={r.y + 13} size={10} weight={800} fill={c.text} spacing={0.3}>WORSHIP TEAM · 150 (75 + 75)</Txt>
+                      {R({ x: r.x + 18, y: r.y + 24, w: 62, h: r.h - 32 }, { fill: '#22A053', stroke: '#166534', strokeWidth: 1, rx: 2, pointerEvents: 'none' })}
+                      {R({ x: r.x + 18, y: r.y + 24, w: 62, h: r.h - 32 }, { fill: 'url(#grm-seats-stage)', pointerEvents: 'none' })}
+                      <Txt o={orient} x={r.x + 92} y={r.y + 24 + (r.h - 32) / 2} size={8.5} weight={800} land={90} port={0} fill="#166534" spacing={0.5}>AISLE</Txt>
+                      {R({ x: r.x + 104, y: r.y + 24, w: 62, h: r.h - 32 }, { fill: '#22A053', stroke: '#166534', strokeWidth: 1, rx: 2, pointerEvents: 'none' })}
+                      {R({ x: r.x + 104, y: r.y + 24, w: 62, h: r.h - 32 }, { fill: 'url(#grm-seats-stage)', pointerEvents: 'none' })}
                     </>
                   ) : a.ref === 'apostle' ? (
-                    <>
-                      {Array.from({ length: 9 }, (_, i) => (
-                        <g key={i}>
-                          {R({ x: r.x - 10, y: r.y + i * 21, w: 12, h: 14 }, { fill: lit ? '#93304E' : '#EFE6FF', stroke: '#7C3AED', strokeWidth: 1.5, rx: 2.5, pointerEvents: 'none' })}
-                        </g>
-                      ))}
-                      <Txt o={orient} x={r.x + 14} y={r.y + r.h / 2} size={13} weight={700} land={-90} port={0} fill={c.text}>Apostle and guest ministers</Txt>
-                    </>
+                    <Txt o={orient} x={r.x + 9} y={r.y + r.h / 2} size={13} weight={700} land={-90} port={0} fill={c.text}>Apostle and guest ministers</Txt>
                   ) : a.ref === 'protocol' ? (
-                    R(r, { fill: lit ? '#93304E' : 'transparent', stroke: focus || hover === a.ref ? '#111827' : 'none', strokeWidth: 2, rx: 2 })
+                    R(r, { fill: 'transparent', stroke: focus || hover === a.ref ? '#111827' : 'none', strokeWidth: 2, rx: 2 })
                   ) : a.ref === 'screen' ? (
                     <>
                       {['#2349B8', '#17A2B8', '#7C3AED', '#17A2B8', '#2349B8'].map((f, i) => (
-                        <g key={i}>{R({ x: r.x, y: r.y + (i * r.h) / 5, w: r.w, h: r.h / 5 - 1.5 }, { fill: lit ? '#93304E' : f, pointerEvents: 'none' })}</g>
+                        <g key={i}>{R({ x: r.x, y: r.y + (i * r.h) / 5, w: r.w, h: r.h / 5 - 1.5 }, { fill: f, pointerEvents: 'none' })}</g>
                       ))}
                       {R(r, { fill: 'none', stroke: edge, strokeWidth: focus || hover === a.ref ? 3 : 1 })}
                     </>
                   ) : a.ref === 'walkway' ? (
                     <>
-                      {R(r, { fill: lit ? '#93304E' : c.fill, stroke: edge, strokeWidth: thick, rx: 4 })}
+                      {R(r, { fill: c.fill, stroke: edge, strokeWidth: thick, rx: 4 })}
                       {(() => {
                         const p = P.pt(r.x + 22, cy)
                         const q = orient === 'landscape'
                           ? `M${p.x - 10} ${p.y}L${p.x + 8} ${p.y - 10}L${p.x + 8} ${p.y + 10}Z`
                           : `M${p.x} ${p.y + 10}L${p.x - 10} ${p.y - 8}L${p.x + 10} ${p.y - 8}Z`
-                        return <path d={q} fill={lit ? '#FFFFFF' : '#6D28D9'} pointerEvents="none" />
+                        return <path d={q} fill="#6D28D9" pointerEvents="none" />
                       })()}
-                      <Txt o={orient} x={cx + 12} y={cy} size={11.5} weight={800} fill={lit ? '#FFFFFF' : '#5B21B6'} spacing={0.4}>COVERED WALKWAY</Txt>
+                      <Txt o={orient} x={cx + 12} y={cy} size={11.5} weight={800} fill="#5B21B6" spacing={0.4}>COVERED WALKWAY</Txt>
                     </>
                   ) : (
-                    R(r, { fill, stroke: edge, strokeWidth: thick, rx: 6 })
+                    R(r, { fill: c.fill, stroke: edge, strokeWidth: thick, rx: 6 })
                   )}
-
-                  {cov && !['protocol', 'apostle', 'screen'].includes(a.ref) && (() => { const q = P.rect(r); return <circle cx={q.x + q.w - 12} cy={q.y + 12} r={8} fill={cov.solid} stroke="#FFFFFF" strokeWidth={2} pointerEvents="none" /> })()}
 
                   {a.ref === 'altar' && (
                     <>
-                      <Txt o={orient} x={cx} y={cy} dy={-44} size={15} weight={500} fill={txt}>Pulpit and</Txt>
-                      <Txt o={orient} x={cx} y={cy} dy={-25} size={15} weight={500} fill={txt}>platform</Txt>
-                      <Txt o={orient} x={cx} y={cy} dy={6} size={30} weight={800} fill={txt}>ALTAR</Txt>
-                      <Txt o={orient} x={cx} y={cy} dy={35} size={13.5} weight={700} fill={txt}>30 m wide</Txt>
-                      <Txt o={orient} x={r.x + 9} y={cy} size={10.5} weight={700} land={-90} port={0} fill={txt}>30 m</Txt>
+                      <Txt o={orient} x={cx} y={cy} dy={-44} size={15} weight={500} fill={c.text}>Pulpit and</Txt>
+                      <Txt o={orient} x={cx} y={cy} dy={-25} size={15} weight={500} fill={c.text}>platform</Txt>
+                      <Txt o={orient} x={cx} y={cy} dy={6} size={30} weight={800} fill={c.text}>ALTAR</Txt>
+                      <Txt o={orient} x={cx} y={cy} dy={35} size={13.5} weight={700} fill={c.text}>30 m wide</Txt>
+                      <Txt o={orient} x={r.x + 9} y={cy} size={10.5} weight={700} land={90} port={0} fill={c.text}>30 m</Txt>
                     </>
                   )}
                   {a.ref === 'tech' && (
                     <>
-                      <Txt o={orient} x={cx} y={cy} dy={-8} size={15} weight={800} fill={txt}>TECHNICAL</Txt>
-                      <Txt o={orient} x={cx} y={cy} dy={10} size={12} weight={500} fill={lit ? '#FFFFFF' : '#4B5263'}>space</Txt>
+                      <Txt o={orient} x={cx} y={cy} dy={-8} size={15} weight={800} fill={c.text}>TECHNICAL</Txt>
+                      <Txt o={orient} x={cx} y={cy} dy={10} size={12} weight={500} fill="#4B5263">space</Txt>
                     </>
                   )}
                 </g>
@@ -754,36 +725,43 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
             <Txt o={orient} x={1412} y={640} size={10} weight={800} fill="#1F2430">SCREEN</Txt>
             <Txt o={orient} x={1412} y={653} size={8.5} weight={500} fill="#4B5263">1 m deep</Txt>
 
-            {/* usher seats (Sections 1–72 only) */}
+            {/* usher seats: 4 per section on ALL sections 1–72 (including 5, 6, 7, 17, 18) */}
             {spots.map((sp) => {
               const p = P.pt(sp.x, sp.y)
-              const who = occupants?.[sp.positionId]
-              const away = !who ? uncovered?.[sp.positionId] : undefined
-              const mine = sp.positionId === highlightPositionId
-              const inFocus = !!focusId && sp.zoneId === focusId
-              const faded = mode === 'locate' && !inFocus
-              const tappable = !!onSelectSpot
-              const hov = hoverSpot === sp.positionId
+              const who = sp.positionId ? occupants?.[sp.positionId] : undefined
+              const away = !who && sp.positionId ? uncovered?.[sp.positionId] : undefined
+              const mine = !!sp.positionId && sp.positionId === highlightPositionId
+              const targetPosId = sp.positionId ?? sp.fallbackPositionId
+              const tappable = !!(onSelectSpot && sp.zoneId && targetPosId) || !!(onSelect && sp.zoneId)
+              const hov = hoverSpot === sp.key
+              const handleSpotActivate = (e: React.MouseEvent | React.KeyboardEvent) => {
+                e.stopPropagation()
+                if (moved.current) return
+                if (onSelectSpot && sp.zoneId && targetPosId) onSelectSpot(sp.zoneId, targetPosId)
+                else if (onSelect && sp.zoneId) onSelect(sp.zoneId)
+              }
               return (
                 <g
-                  key={sp.positionId}
-                  opacity={faded ? 0.35 : 1}
+                  key={sp.key}
                   {...(tappable ? {
-                    role: 'button', tabIndex: 0, 'aria-label': `${sp.zoneName}, ${sp.name}: ${who ?? (away ? `open, ${away} can't make it` : 'open')}`,
-                    onClick: (e: React.MouseEvent) => { e.stopPropagation(); if (!moved.current) onSelectSpot!(sp.zoneId, sp.positionId) },
-                    onKeyDown: (e: React.KeyboardEvent) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onSelectSpot!(sp.zoneId, sp.positionId)),
+                    role: 'button',
+                    tabIndex: 0,
+                    'aria-label': `${sp.zoneName}, ${sp.name}: ${who ?? (away ? `open, ${away} can't make it` : 'usher seat')}`,
+                    onClick: handleSpotActivate,
+                    onKeyDown: (e: React.KeyboardEvent) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), handleSpotActivate(e)),
                     className: 'cursor-pointer outline-none',
-                  } : { pointerEvents: mode === 'locate' ? 'none' : undefined })}
-                  onMouseEnter={() => setHoverSpot(sp.positionId)}
-                  onMouseLeave={() => setHoverSpot((h) => (h === sp.positionId ? null : h))}
+                  } : {})}
+                  onMouseEnter={() => setHoverSpot(sp.key)}
+                  onMouseLeave={() => setHoverSpot((h) => (h === sp.key ? null : h))}
                 >
-                  {tappable && <circle cx={p.x} cy={p.y} r={14} fill="transparent" />}
+                  {tappable && <circle cx={p.x} cy={p.y} r={13} fill="transparent" />}
                   <circle
-                    cx={p.x} cy={p.y} r={mine ? 10 : 6.5}
-                    fill={mine ? '#93304E' : who ? '#F2A31B' : away ? '#FFE4E6' : '#FFFFFF'}
-                    stroke={hov ? '#111827' : mine ? '#FFFFFF' : who ? '#8A5A08' : away ? '#D8263A' : '#C98A12'}
-                    strokeWidth={hov ? 3 : away ? 2.5 : 2}
-                    strokeDasharray={who || mine ? undefined : '3 2'}
+                    cx={p.x}
+                    cy={p.y}
+                    r={mine ? 9.5 : 6.2}
+                    fill={mine ? '#93304E' : '#F59E0B'}
+                    stroke={hov ? '#111827' : mine ? '#FFFFFF' : away ? '#D8263A' : '#4A3508'}
+                    strokeWidth={hov ? 2.8 : mine ? 2.5 : away ? 2.4 : 1.6}
                   />
                 </g>
               )
@@ -796,12 +774,8 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
                 d={d}
                 P={P}
                 o={orient}
-                zone={zoneFor(d.ref)}
                 focus={isFocus(d.ref)}
                 hover={hover === d.ref}
-                dimmed={dim(d.ref)}
-                mode={mode}
-                coverage={coverageOf(d.ref)}
                 hit={hit(d.ref, `Door ${d.ref}, ${DOOR_KIND_LABEL[d.kind].toLowerCase()}`)}
               />
             ))}
@@ -817,7 +791,7 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
                 const v = orient === 'landscape'
                 return (
                   <g key={d.ref}>
-                    <Txt o={orient} x={d.label.x} y={48} size={10} weight={800} fill="#D8263A" port={-90}>ENTRANCE / EXIT</Txt>
+                    <Txt o={orient} x={d.label.x} y={46} size={10} weight={800} fill="#D8263A" port={-90}>ENTRANCE / EXIT</Txt>
                     <path d={v ? `M${p.x} ${p.y - 12}V${p.y + 12}M${p.x - 4.5} ${p.y - 6.5}L${p.x} ${p.y - 12}L${p.x + 4.5} ${p.y - 6.5}M${p.x - 4.5} ${p.y + 6.5}L${p.x} ${p.y + 12}L${p.x + 4.5} ${p.y + 6.5}` : `M${p.x - 12} ${p.y}H${p.x + 12}M${p.x - 6.5} ${p.y - 4.5}L${p.x - 12} ${p.y}L${p.x - 6.5} ${p.y + 4.5}M${p.x + 6.5} ${p.y - 4.5}L${p.x + 12} ${p.y}L${p.x + 6.5} ${p.y + 4.5}`} stroke="#D8263A" strokeWidth={2} fill="none" />
                   </g>
                 )
@@ -848,7 +822,7 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
                   <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#C4C9D4" strokeWidth={1.5} />
                   <line x1={t0.x} y1={t0.y} x2={t1.x} y2={t1.y} stroke="#9AA3B5" strokeWidth={1.5} />
                   <rect {...(() => { const c = P.pt(1478, (n.y0 + n.y1) / 2); return orient === 'landscape' ? { x: c.x - 11, y: c.y - 62, width: 22, height: 124 } : { x: c.x - 62, y: c.y - 11, width: 124, height: 22 } })()} fill="#F4F6FA" />
-                  <Txt o={orient} x={1478} y={(n.y0 + n.y1) / 2} size={12.5} weight={700} fill="#6B7280" land={-90} port={0} spacing={1}>{`${n.name} · ${n.size}`}</Txt>
+                  <Txt o={orient} x={1478} y={(n.y0 + n.y1) / 2} size={12.5} weight={700} fill="#6B7280" land={90} port={0} spacing={1}>{`${n.name} · ${n.size}`}</Txt>
                 </g>
               )
             })}
@@ -902,8 +876,8 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
             <>
               <p className="break-words font-semibold leading-snug text-ink-900">{hoveredSpot.zoneName}<span className="font-normal text-ink-500"> · {hoveredSpot.name}</span></p>
               <p className="break-words leading-relaxed text-ink-500">
-                {occupants?.[hoveredSpot.positionId] ?? (uncovered?.[hoveredSpot.positionId] ? `Open: ${uncovered[hoveredSpot.positionId]} can't make it` : 'Open seat')}
-                {info[hoveredSpot.zoneId]?.leaders?.length ? ` · Leader: ${info[hoveredSpot.zoneId].leaders!.join(', ')}` : ''}
+                {(hoveredSpot.positionId && occupants?.[hoveredSpot.positionId]) ?? (hoveredSpot.positionId && uncovered?.[hoveredSpot.positionId] ? `Open: ${uncovered[hoveredSpot.positionId]} can't make it` : 'Usher seat')}
+                {hoveredSpot.zoneId && info[hoveredSpot.zoneId]?.leaders?.length ? ` · Leader: ${info[hoveredSpot.zoneId].leaders!.join(', ')}` : ''}
                 {onSelectSpot ? ' · tap to assign' : ''}
               </p>
             </>
@@ -958,45 +932,34 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
       </div>
       </div>
 
-      {mode === 'coverage' && (
-        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-ink-500">
-          <span className="font-medium text-ink-700">Badge colour:</span>
-          {[98, 90, 50].map((c) => (
-            <span key={c} className="inline-flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: tone(c).solid }} />
-              {tone(c).label}
-            </span>
-          ))}
-        </div>
-      )}
       {!compact && !hideLegend && (
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-ink-500">
           {[
-            ['#2F5DD3', 'Seating (11 rows of 12; named front: 5 rows)'],
-            ['#34A853', 'MPFs & Leaders (BRAVO); Int’l Guests (BRAVO, ALPHA, 8–10, 20–22)'],
+            ['#2F5DD3', 'Seating sections, 11 rows (12 seats per row); named front sections: 5 rows'],
+            ['#34A853', 'MPFs & Leaders (front row of BRAVO); Int’l Guests (BRAVO, ALPHA; sections 8–10, 20–22)'],
             ['#17A2B8', 'ADCs & PAs (front row of DELTA)'],
             ['#3A3D44', 'Select Contemporaries (CHARLIE)'],
-            ['#E5486F', 'Lady Sandra’s (ECHO)'],
-            ['#C69214', 'Councillors (120: 60 + 60)'],
-            ['#2BA457', 'Worship team (150: 75 + 75)'],
-            ['#E89B3C', 'Media & technical desks'],
-            ['#2E9E5B', 'Aisle doors C1–C9'],
-            ['#F28C1B', 'Closed during service (C2, C5, C8)'],
-            ['#D8263A', 'Two-way doors P11–P13'],
-            ['#0F6B58', 'Workers only (X1, X2)'],
-            ['#7C3AED', 'Access doors (P10, SE2–SE4)'],
+            ['#E5486F', 'Lady Sandra’s section (ECHO)'],
+            ['#7C3AED', 'Apostle and guest ministers (9 special chairs)'],
+            ['#E89B3C', 'Media and technical (by 18–19, 30–31; media by 42–43, 54–55)'],
+            ['#111318', 'Technical space (stage, beside the altar)'],
+            ['#FDECC8', 'Altar and pulpit platform (30 m, Nave B)'],
+            ['#2BA457', 'Worship team (150 chairs: 75 + 75)'],
+            ['#17A2B8', 'Crane and screen: 1 m strip behind the stage'],
+            ['#2E9E5B', 'Aisle doors C1–C9, one on each aisle (back wall)'],
+            ['#F28C1B', 'Aisle doors C2, C5, C8: closed during service'],
+            ['#0F6B58', 'Workers only doors X1, X2 (entrance and exit, Nave A)'],
+            ['#D8263A', 'Two-way doors P11, P12, P13 (Nave C): entrance and exit'],
+            ['#7C3AED', 'Access doors SE2, SE3, SE4, P10 & covered walkway'],
+            ['#C69214', 'Councillors (120 chairs: 60 + 60), behind the worship team, 10 ft apart'],
+            ['#C5D3F0', 'Aisles 1–9, cross aisles and front aisle'],
+            ['#A9BDEB', 'Nave B aisles 4 to 6 (central lane)'],
           ].map(([c, l]) => (
-            <span key={l} className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: c }} />{l}</span>
+            <span key={l} className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 shrink-0 rounded-sm ring-1 ring-black/10" style={{ background: c }} />{l}</span>
           ))}
-          <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-3.5 shrink-0 rounded-sm border border-dashed border-[#F08A1C]" />Outer sections by exit doors</span>
-          {spots.length > 0 && (
-            <>
-              <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-[#8A5A08] bg-[#F2A31B]" />Usher seat, filled (1–72)</span>
-              <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-dashed border-[#C98A12] bg-white" />Usher seat, open (1–72)</span>
-              {uncovered && Object.keys(uncovered).length > 0 && <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-dashed border-[#D8263A] bg-[#FFE4E6]" />Needs cover</span>}
-            </>
-          )}
-          <span className="inline-flex items-center gap-1.5"><span className="h-0 w-4 shrink-0 border-t-2 border-dashed border-ink-700" />Tent line (pillars, not an aisle)</span>
+          <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-3.5 shrink-0 rounded-sm border border-dashed border-[#F08A1C]" />Outer sections by the exit doors (dashed outline)</span>
+          <span className="inline-flex items-center gap-1.5"><span className="h-0 w-4 shrink-0 border-t-2 border-dashed border-ink-700" />Tent line, chair column removed: aluminium pillars (not an aisle)</span>
+          <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-[#4A3508] bg-[#F59E0B]" />Usher seats: 4 per section (first and last row, both ends), sections 1–72 only</span>
         </div>
       )}
 
@@ -1036,21 +999,16 @@ function MapBtn({ label, onClick, disabled, children }: { label: string; onClick
 }
 
 
-function DoorMark({ d, P, o, zone, focus, hover, dimmed, mode, coverage, hit }: {
+function DoorMark({ d, P, o, focus, hover, hit }: {
   d: Door
   P: ReturnType<typeof project>
   o: Orient
-  zone?: Zone
   focus: boolean
   hover: boolean
-  dimmed: boolean
-  mode: MapMode
-  coverage?: number
   hit: Record<string, unknown>
 }) {
   const B = PLAN.building
-  const color = focus && mode === 'locate' ? '#93304E' : DOOR_COLOR[d.kind]
-  const status = mode === 'coverage' && zone ? tone(coverage).solid : undefined
+  const color = DOOR_COLOR[d.kind]
   const half = (d.b - d.a) / 2
   const wall = (t: number) => {
     if (d.side === 'top') return { x: t, y: B.y }
@@ -1077,13 +1035,12 @@ function DoorMark({ d, P, o, zone, focus, hover, dimmed, mode, coverage, hit }: 
   const bw = 48
   const bh = 28
   return (
-    <g {...hit} opacity={dimmed ? 0.5 : 1}>
+    <g {...hit}>
       <rect x={Math.min(r.x, lp.x - bw / 2) - 6} y={Math.min(r.y, lp.y - bh / 2) - 6} width={Math.max(r.x + r.w, lp.x + bw / 2) - Math.min(r.x, lp.x - bw / 2) + 12} height={Math.max(r.y + r.h, lp.y + bh / 2) - Math.min(r.y, lp.y - bh / 2) + 12} fill="transparent" />
       <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke="#FFFFFF" strokeWidth={8} />
       <path d={swing} fill={`${color}22`} stroke={color} strokeWidth={2} />
       <rect x={lp.x - bw / 2} y={lp.y - bh / 2} width={bw} height={bh} rx={bh / 2} fill={color} stroke={focus || hover ? '#111827' : '#FFFFFF'} strokeWidth={focus || hover ? 3.5 : 2} />
       <Txt o={o} x={d.label.x} y={d.label.y} size={15} weight={800} fill="#FFFFFF">{d.ref}</Txt>
-      {status && <circle cx={lp.x + bw / 2 - 2} cy={lp.y - bh / 2 + 2} r={8} fill={status} stroke="#FFFFFF" strokeWidth={2.5} />}
     </g>
   )
 }
