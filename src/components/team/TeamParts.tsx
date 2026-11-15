@@ -4,9 +4,9 @@ import type { Member, Position, Zone, ZoneKind } from '@/data/types'
 import { coordinatorsFor, leadersForZone, type EventData } from '@/lib/selectors'
 import { cn, formatPhone, fullName, telHref } from '@/lib/utils'
 import { DUTY_LABEL, dutyOf } from '@/data/duties'
-import { SPOTS, hasSpots, sectionOfRef, zoneNote, zoneRef } from '@/data/venue'
+import { SPOTS, doorRefOf, hasSpots, namedOfRef, sectionOfRef, zoneNote, zoneRef } from '@/data/venue'
 
-/** "Sections 40–43, Aisle 5, Door X3" from a list of zone names. */
+/** "Sections 40–43, Sierra, Aisle 5, Door P13" from a list of zone names. */
 export function zoneSummary(names: string[] = []) {
   const secs = names.map((n) => n.match(/^Section (\d+)$/)?.[1]).filter(Boolean).map(Number).sort((a, b) => a - b)
   const rest = names.filter((n) => !/^Section \d+$/.test(n))
@@ -22,9 +22,13 @@ export function zoneSummary(names: string[] = []) {
 }
 
 export function inferZoneKind(name: string): ZoneKind {
-  if (/^sec(?:tion)?\.?\s*\d+$/i.test(name.trim())) return 'section'
-  if (/^aisle\s*\d+$/i.test(name.trim())) return 'aisle'
-  if (/^(?:door\s*)?[DXM]\d\b/i.test(name.trim())) return 'door'
+  const trimmed = name.trim()
+  if (/^sec(?:tion)?\.?\s*\d+$/i.test(trimmed)) return 'section'
+  const bare = trimmed.replace(/^(?:section|sec\.?)\s+/i, '').replace(/\s+section$/i, '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+  if (namedOfRef(bare)) return 'section'
+  if (/^aisle\s*\d+$/i.test(trimmed)) return 'aisle'
+  const dm = trimmed.match(/^(?:door\s*)?([A-Z]{1,2}\d{1,2})\b/i)
+  if (dm && doorRefOf(dm[1])) return 'door'
   return 'area'
 }
 

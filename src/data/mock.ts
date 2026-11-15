@@ -1,5 +1,5 @@
 import type { Activity, AppNotification, Assignment, Duty, Member, MinistryEvent, Position, Zone } from './types'
-import { AISLE_COUNT, DOORS, SECTION_COUNT, SPOTS, hasSpots, naveOf, sectionCell, type DoorKind } from './venue'
+import { AISLE_COUNT, DOORS, NAMED_SECTIONS, SECTION_COUNT, SPOTS, hasSpots, naveOf, sectionCell, type DoorKind, type NamedStyle } from './venue'
 
 /* Deterministic RNG so every fresh install sees the same demo roster. */
 function mulberry32(seed: number) {
