@@ -105,6 +105,12 @@ const AREA_COLOR: Record<string, { fill: string; edge: string; text: string }> =
   front: { fill: '#C5D3F0', edge: '#93ADE0', text: '#2B4AA6' },
 }
 
+function tone(c = 0) {
+  if (c >= 95) return { fill: '#A8D8BC', solid: '#2F7D57', edge: '#2F7D57', label: 'Fully staffed' }
+  if (c >= 85) return { fill: '#F0DCA6', solid: '#C59E4F', edge: '#A9822F', label: 'Nearly staffed' }
+  return { fill: '#EDB8C7', solid: '#93304E', edge: '#93304E', label: 'Needs ushers' }
+}
+
 /* ---------- pan & zoom ---------- */
 
 type View = { k: number; x: number; y: number }
@@ -261,9 +267,11 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
    */
   const spots = useMemo(() => {
     const posByZoneSpot = new Map<string, Position>()
-    const firstPosByZone = new Map<string, Position>()
+    const listByZone = new Map<string, Position[]>()
     for (const p of positions ?? []) {
-      if (!firstPosByZone.has(p.zoneId)) firstPosByZone.set(p.zoneId, p)
+      const arr = listByZone.get(p.zoneId) ?? []
+      arr.push(p)
+      listByZone.set(p.zoneId, arr)
       const spotKey = p.spot ?? SPOTS.find((s) => s.name.toLowerCase() === p.name.trim().toLowerCase())?.key
       if (spotKey) posByZoneSpot.set(`${p.zoneId}_${spotKey}`, p)
     }
@@ -281,19 +289,20 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
       const ref = `S${n}`
       const z = byRef.get(ref)
       const zoneName = z?.name ?? `Section ${n}`
-      const fallback = z ? firstPosByZone.get(z.id) : undefined
-      for (const sp of SPOTS) {
-        const p = z ? posByZoneSpot.get(`${z.id}_${sp.key}`) : undefined
+      const zPositions = z ? (listByZone.get(z.id) ?? []) : []
+      const fallback = zPositions[0]
+      SPOTS.forEach((sp, idx) => {
+        const p = z ? (posByZoneSpot.get(`${z.id}_${sp.key}`) ?? zPositions[idx]) : undefined
         out.push({
-          key: p?.id ?? `${ref}_${sp.key}`,
+          key: `${ref}_${sp.key}`,
           positionId: p?.id,
           fallbackPositionId: fallback?.id,
           zoneId: z?.id,
           zoneName,
-          name: p?.name ?? sp.name,
+          name: sp.name,
           ...spotPoint(n, sp.key),
         })
-      }
+      })
     }
     return out
   }, [positions, byRef])
@@ -356,6 +365,10 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
   /* --- look of each plan item --- */
   const zoneFor = (ref: string) => byRef.get(ref)
   const isFocus = (ref: string) => !!focusId && refOf.get(focusId) === ref
+  const coverageOf = (ref: string) => {
+    const z = zoneFor(ref)
+    return z ? info[z.id]?.coverage ?? 0 : 0
+  }
 
   const hit = (ref: string, label: string) => {
     const z = zoneFor(ref)
@@ -468,6 +481,7 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
               const rects = aisleRects(n)
               const focus = isFocus(ref)
               const lane = LANE_AISLES.includes(n)
+              const badge = mode === 'coverage' ? tone(coverageOf(ref)).solid : '#0B0D12'
               const fill = lane ? '#A9BDEB' : '#C5D3F0'
               const cy = aisleCenterY(n)
               return (
@@ -486,7 +500,7 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
                     return (
                       <g>
                         <circle cx={p.x} cy={p.y} r={20} fill="transparent" />
-                        <circle cx={p.x} cy={p.y} r={11.5} fill="#0B0D12" stroke="#FFFFFF" strokeWidth={2} />
+                        <circle cx={p.x} cy={p.y} r={11.5} fill={badge} stroke="#FFFFFF" strokeWidth={2} />
                       </g>
                     )
                   })()}
@@ -525,6 +539,7 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
               const col = PLAIN[sectionStyle(n)]
               const focus = isFocus(ref)
               const edgeOn = focus || hover === ref
+              const badge = mode === 'coverage' ? tone(coverageOf(ref)).solid : '#0B0D12'
               const cx = r.x + r.w / 2
               const cy = r.y + r.h / 2
               const narrow = n > SPOT_SECTION_MAX
@@ -536,7 +551,7 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
                   {R({ x: r.x + 2.5, y: r.y + 2.5, w: r.w - 5, h: r.h - 5 }, { fill: 'url(#grm-seats)', pointerEvents: 'none' })}
                   {(() => {
                     const p = P.pt(cx, cy)
-                    return <circle cx={p.x} cy={p.y} r={rad} fill="#0B0D12" stroke="#FFFFFF" strokeWidth={1.5} pointerEvents="none" />
+                    return <circle cx={p.x} cy={p.y} r={rad} fill={badge} stroke="#FFFFFF" strokeWidth={1.5} pointerEvents="none" />
                   })()}
                   <Txt o={orient} x={cx} y={cy} size={narrow ? 15 : 16.5} weight={800} fill="#FFFFFF">{n}</Txt>
                 </g>
@@ -547,6 +562,7 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
             {deskAreas.map((a) => {
               const focus = isFocus(a.ref)
               const c = AREA_COLOR[a.ref]
+              const cov = mode === 'coverage' && zoneFor(a.ref) ? tone(coverageOf(a.ref)) : undefined
               const r = a.rect
               const cx = r.x + r.w / 2
               const cy = r.y + r.h / 2
@@ -564,6 +580,7 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
                   ) : (
                     <Txt o={orient} x={cx} y={cy} size={13} weight={800} land={-90} port={0} fill="#111318" spacing={0.5}>TECHNICAL</Txt>
                   )}
+                  {cov && (() => { const q = P.rect(r); return <circle cx={q.x + q.w / 2} cy={q.y + 10} r={6.5} fill={cov.solid} stroke="#FFFFFF" strokeWidth={2} pointerEvents="none" /> })()}
                 </g>
               )
             })}
@@ -574,6 +591,7 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
               const col = NAMED_PLAIN[ns.style]
               const focus = isFocus(ns.ref)
               const edgeOn = focus || hover === ns.ref
+              const tagFill = mode === 'coverage' ? tone(coverageOf(ns.ref)).solid : '#0B0D12'
               const seatW = 58
               const seatRect: Rect = { x: r.x, y: r.y, w: seatW, h: r.h }
               const tagRect: Rect = { x: r.x + seatW + 2, y: r.y + 5, w: 18, h: r.h - 10 }
@@ -613,8 +631,8 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
                     </>
                   )}
 
-                  {/* black vertical section name tag */}
-                  {R(tagRect, { fill: '#0B0D12', stroke: edgeOn ? '#111827' : '#FFFFFF', strokeWidth: 1, rx: 4 })}
+                  {/* vertical section name tag */}
+                  {R(tagRect, { fill: tagFill, stroke: edgeOn ? '#111827' : '#FFFFFF', strokeWidth: 1, rx: 4 })}
                   <Txt o={orient} x={tagCx} y={cy} size={9.5} weight={800} land={90} port={0} fill="#FFFFFF" spacing={0.4}>{ns.ref}</Txt>
 
                   {/* GLASS tag beside DELTA */}
@@ -644,8 +662,10 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
             </g>
 
             {stageAreas.map((a) => {
+              const z = zoneFor(a.ref)
               const focus = isFocus(a.ref)
               const c = AREA_COLOR[a.ref] ?? { fill: '#FFFFFF', edge: '#111318', text: '#111318' }
+              const cov = mode === 'coverage' && z ? tone(coverageOf(a.ref)) : undefined
               const r = a.rect
               const cx = r.x + r.w / 2
               const cy = r.y + r.h / 2
@@ -704,6 +724,8 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
                     R(r, { fill: c.fill, stroke: edge, strokeWidth: thick, rx: 6 })
                   )}
 
+                  {cov && !['protocol', 'apostle', 'screen'].includes(a.ref) && (() => { const q = P.rect(r); return <circle cx={q.x + q.w - 12} cy={q.y + 12} r={8} fill={cov.solid} stroke="#FFFFFF" strokeWidth={2} pointerEvents="none" /> })()}
+
                   {a.ref === 'altar' && (
                     <>
                       <Txt o={orient} x={cx} y={cy} dy={-44} size={15} weight={500} fill={c.text}>Pulpit and</Txt>
@@ -731,6 +753,7 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
               const who = sp.positionId ? occupants?.[sp.positionId] : undefined
               const away = !who && sp.positionId ? uncovered?.[sp.positionId] : undefined
               const mine = !!sp.positionId && sp.positionId === highlightPositionId
+              const filled = mode === 'plain' ? true : !!who
               const targetPosId = sp.positionId ?? sp.fallbackPositionId
               const tappable = !!(onSelectSpot && sp.zoneId && targetPosId) || !!(onSelect && sp.zoneId)
               const hov = hoverSpot === sp.key
@@ -746,7 +769,7 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
                   {...(tappable ? {
                     role: 'button',
                     tabIndex: 0,
-                    'aria-label': `${sp.zoneName}, ${sp.name}: ${who ?? (away ? `open, ${away} can't make it` : 'usher seat')}`,
+                    'aria-label': `${sp.zoneName}, ${sp.name}: ${who ?? (away ? `open, ${away} can't make it` : 'open seat')}`,
                     onClick: handleSpotActivate,
                     onKeyDown: (e: React.KeyboardEvent) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), handleSpotActivate(e)),
                     className: 'cursor-pointer outline-none',
@@ -758,10 +781,11 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
                   <circle
                     cx={p.x}
                     cy={p.y}
-                    r={mine ? 9.5 : 6.2}
-                    fill={mine ? '#93304E' : '#F59E0B'}
-                    stroke={hov ? '#111827' : mine ? '#FFFFFF' : away ? '#D8263A' : '#4A3508'}
-                    strokeWidth={hov ? 2.8 : mine ? 2.5 : away ? 2.4 : 1.6}
+                    r={mine ? 10 : 6.5}
+                    fill={mine ? '#93304E' : filled ? '#F2A31B' : away ? '#FFE4E6' : '#FFFFFF'}
+                    stroke={hov ? '#111827' : mine ? '#FFFFFF' : filled ? '#8A5A08' : away ? '#D8263A' : '#C98A12'}
+                    strokeWidth={hov ? 3 : away ? 2.5 : 2}
+                    strokeDasharray={filled || mine ? undefined : '3 2'}
                   />
                 </g>
               )
@@ -774,8 +798,11 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
                 d={d}
                 P={P}
                 o={orient}
+                zone={zoneFor(d.ref)}
                 focus={isFocus(d.ref)}
                 hover={hover === d.ref}
+                mode={mode}
+                coverage={coverageOf(d.ref)}
                 hit={hit(d.ref, `Door ${d.ref}, ${DOOR_KIND_LABEL[d.kind].toLowerCase()}`)}
               />
             ))}
@@ -932,6 +959,17 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
       </div>
       </div>
 
+      {mode === 'coverage' && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-ink-500">
+          <span className="font-medium text-ink-700">Badge colour:</span>
+          {[98, 90, 50].map((c) => (
+            <span key={c} className="inline-flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: tone(c).solid }} />
+              {tone(c).label}
+            </span>
+          ))}
+        </div>
+      )}
       {!compact && !hideLegend && (
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-ink-500">
           {[
@@ -958,8 +996,10 @@ export function VenueMap({ zones, mode = 'plain', highlightZoneId, selectedZoneI
             <span key={l} className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 shrink-0 rounded-sm ring-1 ring-black/10" style={{ background: c }} />{l}</span>
           ))}
           <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-3.5 shrink-0 rounded-sm border border-dashed border-[#F08A1C]" />Outer sections by the exit doors (dashed outline)</span>
+          <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-[#8A5A08] bg-[#F2A31B]" />Usher seat, filled (1–72)</span>
+          <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-dashed border-[#C98A12] bg-white" />Usher seat, open (1–72)</span>
+          {uncovered && Object.keys(uncovered).length > 0 && <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-dashed border-[#D8263A] bg-[#FFE4E6]" />Needs cover</span>}
           <span className="inline-flex items-center gap-1.5"><span className="h-0 w-4 shrink-0 border-t-2 border-dashed border-ink-700" />Tent line, chair column removed: aluminium pillars (not an aisle)</span>
-          <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-[#4A3508] bg-[#F59E0B]" />Usher seats: 4 per section (first and last row, both ends), sections 1–72 only</span>
         </div>
       )}
 
@@ -999,16 +1039,20 @@ function MapBtn({ label, onClick, disabled, children }: { label: string; onClick
 }
 
 
-function DoorMark({ d, P, o, focus, hover, hit }: {
+function DoorMark({ d, P, o, zone, focus, hover, mode, coverage, hit }: {
   d: Door
   P: ReturnType<typeof project>
   o: Orient
+  zone?: Zone
   focus: boolean
   hover: boolean
+  mode: MapMode
+  coverage?: number
   hit: Record<string, unknown>
 }) {
   const B = PLAN.building
   const color = DOOR_COLOR[d.kind]
+  const status = mode === 'coverage' && zone ? tone(coverage).solid : undefined
   const half = (d.b - d.a) / 2
   const wall = (t: number) => {
     if (d.side === 'top') return { x: t, y: B.y }
@@ -1041,6 +1085,7 @@ function DoorMark({ d, P, o, focus, hover, hit }: {
       <path d={swing} fill={`${color}22`} stroke={color} strokeWidth={2} />
       <rect x={lp.x - bw / 2} y={lp.y - bh / 2} width={bw} height={bh} rx={bh / 2} fill={color} stroke={focus || hover ? '#111827' : '#FFFFFF'} strokeWidth={focus || hover ? 3.5 : 2} />
       <Txt o={o} x={d.label.x} y={d.label.y} size={15} weight={800} fill="#FFFFFF">{d.ref}</Txt>
+      {status && <circle cx={lp.x + bw / 2 - 2} cy={lp.y - bh / 2 + 2} r={8} fill={status} stroke="#FFFFFF" strokeWidth={2.5} />}
     </g>
   )
 }

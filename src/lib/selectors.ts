@@ -252,7 +252,7 @@ export function spotOccupants(data: EventData, members: Map<string, Member>, onl
   const out: Record<string, string> = {}
   for (const a of data.assignments) {
     const p = data.positionById.get(a.positionId)
-    if (!p?.spot) continue
+    if (!p) continue
     const m = members.get(a.memberId)
     if (!m) continue
     out[p.id] = !only || only.has(a.zoneId) ? `${m.firstName} ${m.lastName}` : 'Usher assigned'
@@ -271,7 +271,7 @@ export function uncoveredSpots(data: EventData, members: Map<string, Member>) {
   for (const a of data.unavailable) {
     const p = data.positionById.get(a.positionId)
     const m = members.get(a.memberId)
-    if (p?.spot && m && !taken.has(p.id)) out[p.id] = `${m.firstName} ${m.lastName}`
+    if (p && m && !taken.has(p.id)) out[p.id] = `${m.firstName} ${m.lastName}`
   }
   return out
 }
