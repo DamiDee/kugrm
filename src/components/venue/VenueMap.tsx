@@ -339,16 +339,20 @@ export function VenueMap({
     }[] = []
     if (isOverflow) {
       const generalOvf = byRef.get('OVERFLOW')
+      const generalAssigned = generalOvf ? (info[generalOvf.id]?.assigned ?? 0) : 0
       const generalPositions = generalOvf ? (listByZone.get(generalOvf.id) ?? []) : []
       for (let n = 1; n <= OVERFLOW_SECTION_COUNT; n++) {
         const ref = `OS${n}`
-        const z = byRef.get(ref) ?? generalOvf
-        const zoneName = byRef.get(ref)?.name ?? `Overflow Section ${n}`
-        const zPositions = byRef.get(ref) ? (listByZone.get(byRef.get(ref)!.id) ?? []) : generalPositions
+        const exactZone = byRef.get(ref)
+        const exactAssigned = exactZone ? (info[exactZone.id]?.assigned ?? 0) : 0
+        const useGeneral = !!generalOvf && generalAssigned > 0 && (!exactZone || (exactZone.id.startsWith('vzone__') && exactAssigned === 0))
+        const z = useGeneral ? generalOvf : (exactZone ?? generalOvf)
+        const zoneName = useGeneral ? generalOvf.name : (exactZone?.name ?? `Overflow Section ${n}`)
+        const zPositions = useGeneral ? generalPositions : (exactZone ? (listByZone.get(exactZone.id) ?? []) : generalPositions)
         const fallback = zPositions[0]
         const assignedInZone = z ? (info[z.id]?.assigned ?? 0) : 0
         OVERFLOW_SPOTS.forEach((sp, idx) => {
-          const exactPos = byRef.get(ref) ? (posByZoneSpot.get(`${byRef.get(ref)!.id}_${sp.key}`) ?? zPositions[idx]) : undefined
+          const exactPos = !useGeneral && exactZone ? (posByZoneSpot.get(`${exactZone.id}_${sp.key}`) ?? zPositions[idx]) : undefined
           const singleMultiPos = zPositions.length === 1 && (zPositions[0].required ?? 0) > 1
           out.push({
             key: `${ref}_${sp.key}`,
@@ -358,7 +362,11 @@ export function VenueMap({
             zoneName,
             name: sp.name,
             ...overflowSpotPoint(n, sp.key),
-            filledByZoneCount: singleMultiPos ? assignedInZone > idx : (!byRef.get(ref) && !!generalOvf ? assignedInZone >= (n - 1) * 2 + idx + 1 : undefined),
+            filledByZoneCount: useGeneral
+              ? generalAssigned >= (n - 1) * 2 + idx + 1
+              : singleMultiPos
+                ? assignedInZone > idx
+                : undefined,
           })
         })
       }
@@ -415,7 +423,19 @@ export function VenueMap({
   }, [P, vb.w, vb.x, vb.y, clamp, setView])
 
   /* --- look of each plan item --- */
-  const zoneFor = (ref: string) => byRef.get(ref) ?? (isOverflow && (/^OS\d+$/.test(ref) || /^OA\d+$/.test(ref)) ? byRef.get('OVERFLOW') : undefined)
+  const zoneFor = (ref: string) => {
+    const exact = byRef.get(ref)
+    if (isOverflow && (/^OS\d+$/.test(ref) || /^OA\d+$/.test(ref))) {
+      const generalOvf = byRef.get('OVERFLOW')
+      const exactAssigned = exact ? (info[exact.id]?.assigned ?? 0) : 0
+      const generalAssigned = generalOvf ? (info[generalOvf.id]?.assigned ?? 0) : 0
+      if (generalOvf && generalAssigned > 0 && (!exact || (exact.id.startsWith('vzone__') && exactAssigned === 0))) {
+        return generalOvf
+      }
+      return exact ?? generalOvf
+    }
+    return exact
+  }
   const isFocus = (ref: string) => {
     if (!focusId) return false
     const fRef = refOf.get(focusId)
@@ -1313,17 +1333,22 @@ export function VenueMap({
         )
       )}
 
-      {unplaced.length > 0 && !compact && mode !== 'locate' && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-ink-500">
-          <span>Outside the hall:</span>
-          {unplaced.map((z) => (
-            <button key={z.id} onClick={() => onSelect?.(z.id)} className={cn('min-h-[32px] rounded-full border border-line bg-white px-3 py-1 text-ink-700 hover:border-line-strong', z.id === focusId && 'border-wine-400 text-wine-700')}>
-              {z.name}
-              {mode === 'coverage' && info[z.id] && <span className="ml-1.5 text-ink-400 tabular">{info[z.id].coverage}%</span>}
-            </button>
-          ))}
-        </div>
-      )}
+      {(() => {
+        const generalOvf = byRef.get('OVERFLOW')
+        const extraOutside = generalOvf && !compact && mode !== 'locate' ? [generalOvf, ...unplaced] : unplaced
+        if (extraOutside.length === 0 || compact || mode === 'locate') return null
+        return (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-ink-500">
+            <span>Outside the hall:</span>
+            {extraOutside.map((z) => (
+              <button key={z.id} onClick={() => onSelect?.(z.id)} className={cn('min-h-[32px] rounded-full border border-line bg-white px-3 py-1 text-ink-700 hover:border-line-strong', z.id === focusId && 'border-wine-400 text-wine-700')}>
+                {z.name}
+                {mode === 'coverage' && info[z.id] && <span className="ml-1.5 text-ink-400 tabular">{info[z.id].coverage}%</span>}
+              </button>
+            ))}
+          </div>
+        )
+      })()}
     </div>
   )
 }
