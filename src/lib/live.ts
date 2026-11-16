@@ -455,6 +455,38 @@ export async function loadTeam(eventId?: string) {
       ? [{ member: r.me, zones: r.zones ?? r.me?.zones ?? [], leaders: meLeaders }]
       : []
 
+  const seenZones = new Set<string>()
+  const pushZoneEntry = (z: any, extraLeaderIds: string[] = []) => {
+    const zObj = z.zone ?? z
+    if (!zObj?.id) return
+    if (!seenZones.has(zObj.id)) {
+      seenZones.add(zObj.id)
+      zones.push(toZone(zObj, ev.id))
+      positions.push(...(z.positions ?? zObj.positions ?? []).map((p: any) => toPosition(p, zObj.id)))
+    }
+    const zLeaders = [
+      ...extractPeopleList(z.leaders, 'leader'),
+      ...extractPeopleList(z.leader, 'leader'),
+      ...extractPeopleList(zObj.leaders, 'leader'),
+      ...extractPeopleList(zObj.leader, 'leader'),
+    ]
+    zLeaders.forEach((l) => {
+      add(l)
+      extraLeaderIds.push(l.id)
+    })
+    for (const u of z.ushers ?? []) {
+      add(teamMember(u.member ?? u))
+      const mObj = u.member ?? u
+      assignments.push({ id: u.assignmentId ?? u.id, memberId: mObj.id, eventId: ev.id, zoneId: zObj.id, positionId: u.positionId, isTeamLead: !!u.isTeamLead, status: u.status ?? 'assigned', updatedAt: '' })
+    }
+    for (const u of z.unavailable ?? []) {
+      const mObj = u.member ?? u
+      const id = mObj.id ?? `away_${u.assignmentId ?? u.id}`
+      add(teamMember(mObj, { id }))
+      assignments.push({ id: u.assignmentId ?? u.id, memberId: id, eventId: ev.id, zoneId: zObj.id, positionId: u.positionId, isTeamLead: false, status: 'unavailable', unavailableReason: u.reason ?? u.unavailableReason ?? undefined, updatedAt: '' })
+    }
+  }
+
   for (const c of rawCoordinators) {
     const cLeaders = [
       ...extractPeopleList(c.leaders, 'leader'),
@@ -465,30 +497,7 @@ export async function loadTeam(eventId?: string) {
     cLeaders.forEach(add)
     const zoneLeaderIds: string[] = []
     for (const z of c.zones ?? []) {
-      const zObj = z.zone ?? z
-      zones.push(toZone(zObj, ev.id))
-      positions.push(...(z.positions ?? zObj.positions ?? []).map((p: any) => toPosition(p, zObj.id)))
-      const zLeaders = [
-        ...extractPeopleList(z.leaders, 'leader'),
-        ...extractPeopleList(z.leader, 'leader'),
-        ...extractPeopleList(zObj.leaders, 'leader'),
-        ...extractPeopleList(zObj.leader, 'leader'),
-      ]
-      zLeaders.forEach((l) => {
-        add(l)
-        zoneLeaderIds.push(l.id)
-      })
-      for (const u of z.ushers ?? []) {
-        add(teamMember(u.member ?? u))
-        const mObj = u.member ?? u
-        assignments.push({ id: u.assignmentId ?? u.id, memberId: mObj.id, eventId: ev.id, zoneId: zObj.id, positionId: u.positionId, isTeamLead: !!u.isTeamLead, status: u.status ?? 'assigned', updatedAt: '' })
-      }
-      for (const u of z.unavailable ?? []) {
-        const mObj = u.member ?? u
-        const id = mObj.id ?? `away_${u.assignmentId ?? u.id}`
-        add(teamMember(mObj, { id }))
-        assignments.push({ id: u.assignmentId ?? u.id, memberId: id, eventId: ev.id, zoneId: zObj.id, positionId: u.positionId, isTeamLead: false, status: 'unavailable', unavailableReason: u.reason ?? u.unavailableReason ?? undefined, updatedAt: '' })
-      }
+      pushZoneEntry(z, zoneLeaderIds)
     }
     const cMember = c.member ?? c
     const cLeaderIds = [...new Set([
@@ -515,15 +524,19 @@ export async function loadTeam(eventId?: string) {
       }))
     }
   }
+  for (const z of [...(r.zones ?? []), ...(r.me?.zones ?? [])]) {
+    pushZoneEntry(z)
+  }
   const myCoordinates = [...new Set([
     ...(Array.isArray(r.me?.coordinates) ? r.me.coordinates : []),
+    ...(r.me?.role === 'leader' ? zones.map((z) => z.name) : []),
     ...(people.get(r.me.id)?.coordinates ?? []),
   ])]
   add(teamMember(
     { id: r.me.id, firstName: r.me.firstName, lastName: r.me.lastName, phone: r.me.phone },
     {
       role: r.me.role,
-      ...(r.me.role === 'coordinator' ? { leaderId: meLeaderIds[0], leaderIds: meLeaderIds, coordinates: myCoordinates } : {}),
+      ...(r.me.role === 'coordinator' ? { leaderId: meLeaderIds[0], leaderIds: meLeaderIds, coordinates: myCoordinates } : { coordinates: myCoordinates }),
     },
   ))
   const known = new Map(get().members.map((m) => [m.id, m]))

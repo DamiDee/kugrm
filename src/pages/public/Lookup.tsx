@@ -81,7 +81,7 @@ export default function Lookup() {
                 <PhoneLookup tga />
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 px-2 text-xs text-white/40">
                   <span>No account needed. Your number is only used to find your roster entry.</span>
-                  <Link to="/team/login" className="inline-flex items-center gap-1.5 font-medium text-tga-gold hover:text-tga-cream"><ShieldCheck className="h-3.5 w-3.5" /> Coordinator sign-in</Link>
+                  <Link to="/team/login" className="inline-flex items-center gap-1.5 font-medium text-tga-gold hover:text-tga-cream"><ShieldCheck className="h-3.5 w-3.5" /> Leaders &amp; Coordinators sign-in</Link>
                 </div>
               </motion.div>
             </section>

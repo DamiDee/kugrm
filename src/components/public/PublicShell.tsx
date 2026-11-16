@@ -34,7 +34,7 @@ export function PublicNav({ tone = 'dark', tga = false }: { tone?: 'dark' | 'lig
       <nav aria-label="Main" className={cn('notch absolute left-1/2 top-0 hidden -translate-x-1/2 rounded-b-[24px] px-2 pb-2 pt-2 md:block', tga ? 'bg-[#1A160F]' : 'bg-canvas')} style={{ ['--notch' as string]: tga ? '#1A160F' : '#F3F0EA' }}>
         <div className="flex items-center gap-1">
           <NavLink to="/" end className={link}>Find Assignment</NavLink>
-          <NavLink to="/team/login" className={link}>Coordinators</NavLink>
+          <NavLink to="/team/login" className={link}>Leaders &amp; Coordinators</NavLink>
           <NavLink to="/help" className={link}>Help</NavLink>
         </div>
       </nav>
@@ -57,7 +57,7 @@ export function PublicFooter() {
     <footer className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-6 py-6 text-xs text-ink-500 sm:flex-row">
       <span>Koinonia Global · Ushering Department</span>
       <span className="flex gap-4">
-        <Link to="/team/login" className="hover:text-ink-800">Coordinators</Link>
+        <Link to="/team/login" className="hover:text-ink-800">Leaders &amp; Coordinators</Link>
         <Link to="/help" className="hover:text-ink-800">Help</Link>
         <Link to="/admin/login" className="hover:text-ink-800">Administrators</Link>
       </span>

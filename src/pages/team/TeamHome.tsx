@@ -143,7 +143,7 @@ export default function TeamHome() {
         {LIVE && noSession ? (
           <p className="surface p-6 text-sm text-ink-500">No current session available. The admin team will set one up.</p>
         ) : me.role === 'leader' ? (
-          <LeaderView data={data} coordinators={scope.coordinators} memberMap={memberMap} />
+          <LeaderView me={me} data={data} coordinators={scope.coordinators} memberMap={memberMap} />
         ) : (
           <CoordinatorView data={data} zoneNames={coordZoneNames} memberMap={memberMap} />
         )}
@@ -272,26 +272,84 @@ function CoordinatorView({ data, zoneNames, memberMap }: { data: EventData; zone
   )
 }
 
-function LeaderView({ data, coordinators, memberMap }: { data: EventData; coordinators: Member[]; memberMap: Map<string, Member> }) {
-  const all = useMemo(() => new Set(coordinators.flatMap((c) => c.coordinates ?? [])), [coordinators])
+function LeaderView({ me, data, coordinators, memberMap }: { me: Member; data: EventData; coordinators: Member[]; memberMap: Map<string, Member> }) {
+  const all = useMemo(() => {
+    const names = new Set<string>([
+      ...(me.coordinates ?? []),
+      ...coordinators.flatMap((c) => c.coordinates ?? []),
+    ])
+    if (LIVE && names.size === 0) {
+      data.zones.forEach((z) => names.add(z.name))
+    }
+    return names
+  }, [me.coordinates, coordinators, data.zones])
   const allRosters = useZoneRosters(data, all, memberMap)
   const [open, setOpen] = useState<string | null>(null)
-  if (coordinators.length === 0) return <p className="surface p-6 text-sm text-ink-500">No coordinators report to you yet. The admin team sets this on the Team page.</p>
+  const [focus, setFocus] = useState<string | null>(null)
+  const jumpToZone = (zoneId: string) => {
+    setFocus(zoneId)
+    const name = allRosters.find((r) => r.zone.id === zoneId)?.zone.name ?? data.zoneById.get(zoneId)?.name
+    const c = coordinators.find((x) => name && x.coordinates?.includes(name))
+    if (c) setOpen(c.id)
+    document.getElementById(`lzr-${zoneId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  if (coordinators.length === 0 && all.size === 0) {
+    return <p className="surface p-6 text-sm text-ink-500">No coordinators or sections are assigned to you yet. The admin team sets this on the Team page.</p>
+  }
+
   return (
     <>
       <Stats rosters={allRosters} />
-      <TeamMap data={data} rosters={allRosters} memberMap={memberMap} onSelect={(zoneId) => {
-        const name = allRosters.find((r) => r.zone.id === zoneId)?.zone.name ?? data.zoneById.get(zoneId)?.name
-        const c = coordinators.find((x) => name && x.coordinates?.includes(name))
-        if (c) { setOpen(c.id); setTimeout(() => document.getElementById(`co-${c.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60) }
-      }} />
+      {allRosters.length > 0 && (
+        <section className="surface p-4" aria-label="All sections you lead">
+          <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-500">Sections you lead ({allRosters.length})</h2>
+            <span className="text-xs text-ink-400">Tap a section to jump to its ushers</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {allRosters.map((r) => {
+              const active = focus === r.zone.id
+              return (
+                <button
+                  key={r.zone.id}
+                  onClick={() => jumpToZone(r.zone.id)}
+                  className={cn(
+                    'inline-flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl px-3 py-2 text-left text-xs ring-1 transition-colors',
+                    active ? 'bg-ink-950 text-white ring-ink-950' : 'bg-paper/70 text-ink-800 ring-line hover:bg-white hover:ring-line-strong',
+                  )}
+                >
+                  <span className="font-semibold">{r.zone.name}</span>
+                  <span className={cn('tabular', active ? 'text-tga-gold' : 'text-ink-500')}>{r.assigned}/{r.required}</span>
+                  {r.coordinators.length > 0 && (
+                    <span className={cn('break-words', active ? 'text-white/80' : 'text-ink-500')}>
+                      · Coord: {r.coordinators.map(fullName).join(', ')}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </section>
+      )}
+      <TeamMap data={data} rosters={allRosters} memberMap={memberMap} onSelect={jumpToZone} />
       <Absences data={data} members={memberMap} zoneNames={all} limit={12} />
-      <section aria-labelledby="co-h">
-        <h2 id="co-h" className="mb-3 flex items-center gap-2 text-[17px] font-semibold tracking-tight text-ink-900"><Users className="h-4 w-4 text-wine-500" /> Your coordinators</h2>
-        <ul className="space-y-3">
-          {coordinators.map((c) => <CoordinatorRow key={c.id} c={c} data={data} memberMap={memberMap} open={open === c.id} onToggle={() => setOpen((o) => (o === c.id ? null : c.id))} />)}
-        </ul>
-      </section>
+      {coordinators.length > 0 && (
+        <section aria-labelledby="co-h">
+          <h2 id="co-h" className="mb-3 flex items-center gap-2 text-[17px] font-semibold tracking-tight text-ink-900"><Users className="h-4 w-4 text-wine-500" /> Your coordinators</h2>
+          <ul className="space-y-3">
+            {coordinators.map((c) => <CoordinatorRow key={c.id} c={c} data={data} memberMap={memberMap} open={open === c.id} onToggle={() => setOpen((o) => (o === c.id ? null : c.id))} />)}
+          </ul>
+        </section>
+      )}
+      {allRosters.length > 0 && (
+        <section aria-labelledby="lsec-h">
+          <h2 id="lsec-h" className="mb-3 text-[17px] font-semibold tracking-tight text-ink-900">Ushers in your sections</h2>
+          <div className="grid gap-4 md:grid-cols-2">
+            {allRosters.map((r) => <ZoneRosterCard key={r.zone.id} id={`lzr-${r.zone.id}`} r={r} highlight={focus === r.zone.id} />)}
+          </div>
+        </section>
+      )}
     </>
   )
 }
