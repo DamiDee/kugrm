@@ -60,8 +60,8 @@ export default function TeamHome() {
 
   const coordZoneNames = useMemo(() => {
     const names = new Set<string>(me?.coordinates ?? [])
-    if (LIVE && me?.role === 'coordinator') {
-      data.zones.forEach((z) => names.add(z.name))
+    if (LIVE && me?.role === 'coordinator' && names.size === 0) {
+      data.zones.filter((z) => !z.id.startsWith('vzone__')).forEach((z) => names.add(z.name))
     }
     return names
   }, [me, data.zones])
@@ -280,7 +280,7 @@ function LeaderView({ me, data, coordinators, memberMap }: { me: Member; data: E
       ...coordinators.flatMap((c) => c.coordinates ?? []),
     ])
     if (LIVE && names.size === 0) {
-      data.zones.forEach((z) => names.add(z.name))
+      data.zones.filter((z) => !z.id.startsWith('vzone__')).forEach((z) => names.add(z.name))
     }
     return names
   }, [me.coordinates, coordinators, data.zones])
