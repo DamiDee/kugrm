@@ -55,13 +55,13 @@ export default function Events() {
     <div>
       <PageHeader title="Events" description="Every ministry event has its own roster, zones and publication state." actions={<Button variant="primary" onClick={() => setForm({ open: true })}><Plus className="h-4 w-4" /> Create Event</Button>} />
       <div className="mb-4"><Segmented id="etab" value={tab} onChange={setTab} options={[{ value: 'current', label: 'Upcoming & active' }, { value: 'completed', label: 'Completed' }, { value: 'archived', label: 'Archived' }]} /></div>
-      <div className="surface overflow-hidden">
+      <div className="surface">
         {loading ? <TableSkeleton rows={4} /> : list.length === 0 ? (
           <EmptyState icon={<CalendarDays className="h-5 w-5" />} title={tab === 'current' ? 'No events yet' : `No ${tab} events`} description={tab === 'current' ? 'Create your first event to begin building a roster.' : 'Events you complete or archive will appear here.'} action={tab === 'current' ? <Button variant="primary" onClick={() => setForm({ open: true })}><Plus className="h-4 w-4" /> Create Event</Button> : undefined} />
         ) : (
           <ul className="divide-y divide-line">
             {list.map((e) => (
-              <li key={e.id} onClick={() => navigate(`/admin/events/${e.id}`)} className={cn('grid cursor-pointer grid-cols-[auto_1fr_auto] items-center gap-4 px-5 py-4 transition-colors hover:bg-paper md:grid-cols-[auto_1.6fr_1fr_.8fr_.9fr_auto]', e.id === s.activeEventId && 'bg-wine-50/30')}>
+              <li key={e.id} onClick={() => navigate(`/admin/events/${e.id}`)} className={cn('grid cursor-pointer grid-cols-[auto_1fr_auto] items-center gap-4 px-5 py-4 transition-colors first:rounded-t-[18px] last:rounded-b-[18px] hover:bg-paper md:grid-cols-[auto_1.6fr_1fr_.8fr_.9fr_auto]', e.id === s.activeEventId && 'bg-wine-50/30')}>
                 <div className="flex h-12 w-12 flex-col items-center justify-center rounded-xl border border-line bg-white leading-none">
                   <span className="text-[10px] uppercase tracking-wider text-wine-600">{new Date(e.date + 'T12:00').toLocaleDateString('en-GB', { month: 'short' })}</span>
                   <span className="mt-0.5 text-base font-semibold text-ink-900">{new Date(e.date + 'T12:00').getDate()}</span>

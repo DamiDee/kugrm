@@ -163,13 +163,80 @@ export const SPOTS: { key: SpotKey; name: string }[] = [
   { key: 'BL', name: 'Back row, left end' },
   { key: 'BR', name: 'Back row, right end' },
 ]
+/** Sections 73–84 on the main floor and Sections 1–20 in Overflow have two usher seats: Front row, left end & Back row, right end. */
+export const TWO_SPOTS: { key: SpotKey; name: string }[] = [
+  { key: 'FL', name: 'Front row, left end' },
+  { key: 'BR', name: 'Back row, right end' },
+]
 export const spotName = (k: SpotKey) => SPOTS.find((s) => s.key === k)!.name
-export const hasSpots = (n: number) => n >= 1 && n <= SPOT_SECTION_MAX
+export const spotsForSection = (n: number) => (n >= 1 && n <= SPOT_SECTION_MAX ? SPOTS : n > SPOT_SECTION_MAX && n <= SECTION_COUNT ? TWO_SPOTS : [])
+export const hasSpots = (n: number) => n >= 1 && n <= SECTION_COUNT
 export function spotPoint(n: number, k: SpotKey) {
   const r = sectionRect(n)
   // facing the altar (east), left is north (top of the plan)
   const x = k[0] === 'F' ? r.x + r.w : r.x
   const y = k[1] === 'L' ? r.y : r.y + r.h
+  return { x, y }
+}
+
+/* ---------- overflow floor plan (33.6 m × 51.0 m seating block, 20 sections, 3 aisles) ---------- */
+
+export const OVERFLOW_SECTION_COUNT = 20
+export const OVERFLOW_AISLE_COUNT = 3
+export const OVERFLOW_CROSS_AISLE_COUNT = 4
+export const OVERFLOW_COLS = 4
+export const OVERFLOW_ROWS = 5
+export const OVERFLOW_SPOTS = TWO_SPOTS
+
+const OVERFLOW_COL_X = [204, 351, 498, 645]
+const OVERFLOW_COL_W = 123
+const OVERFLOW_ROW_Y = [264, 431, 598, 765, 932]
+const OVERFLOW_ROW_H = 139
+
+export const OVERFLOW_PLAN = {
+  view: { x: 0, y: 0, w: 920, h: 1140 } as Rect,
+  seating: { x: 204, y: 264, w: 564, h: 807 } as Rect,
+  screen: { x: 385, y: 71, w: 202, h: 14 } as Rect,
+}
+
+export function overflowSectionCell(n: number) {
+  return { col: (n - 1) % OVERFLOW_COLS, row: Math.floor((n - 1) / OVERFLOW_COLS) }
+}
+
+export function overflowSectionRect(n: number): Rect {
+  const { col, row } = overflowSectionCell(n)
+  return { x: OVERFLOW_COL_X[col], y: OVERFLOW_ROW_Y[row], w: OVERFLOW_COL_W, h: OVERFLOW_ROW_H }
+}
+
+export function overflowAisleRect(a: number): Rect {
+  return {
+    x: OVERFLOW_COL_X[a - 1] + OVERFLOW_COL_W,
+    y: OVERFLOW_PLAN.seating.y,
+    w: OVERFLOW_COL_X[a] - (OVERFLOW_COL_X[a - 1] + OVERFLOW_COL_W),
+    h: OVERFLOW_PLAN.seating.h,
+  }
+}
+
+export function overflowAisleCenterX(a: number) {
+  const r = overflowAisleRect(a)
+  return r.x + r.w / 2
+}
+
+export function overflowCrossAisleY(c: number) {
+  const top = OVERFLOW_ROW_Y[c - 1] + OVERFLOW_ROW_H
+  const bot = OVERFLOW_ROW_Y[c]
+  return (top + bot) / 2
+}
+
+/**
+ * In the Overflow plan, FRONT (the Hanging LED Screen) is at the top:
+ * - FL ("Front row, left end") is the top-left corner of the section
+ * - BR ("Back row, right end") is the bottom-right corner of the section
+ */
+export function overflowSpotPoint(n: number, k: SpotKey) {
+  const r = overflowSectionRect(n)
+  const x = k[1] === 'L' ? r.x : r.x + r.w
+  const y = k[0] === 'F' ? r.y : r.y + r.h
   return { x, y }
 }
 
@@ -322,14 +389,18 @@ const squash = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '')
 
 /**
  * The plan reference for a zone: S1–S84, a named section (SIERRA…XRAY),
- * A1–A9, a door code, or an area ref. Zones named like the plan ("Section 14",
- * "Sierra", "Aisle 2", "Door C4") are placed even without an explicit mapRef,
- * so zones added by an admin show up too. Door codes from the previous plan
- * (D1–D9, X3–X5, M1–M3) are moved to their new doors.
+ * A1–A9, a door code, an area ref, or an Overflow ref (OS1–OS20, OA1–OA3, OVERFLOW).
+ * Zones named like the plan ("Section 14", "Overflow Section 5", "Sierra",
+ * "Aisle 2", "Door C4") are placed even without an explicit mapRef.
  */
 export function zoneRef(zone: Pick<Zone, 'name' | 'mapRef'>): string | undefined {
   if (zone.mapRef) {
     const m = zone.mapRef.trim()
+    const os = m.match(/^OS(\d{1,2})$/i)
+    if (os) return +os[1] >= 1 && +os[1] <= OVERFLOW_SECTION_COUNT ? `OS${+os[1]}` : undefined
+    const oa = m.match(/^OA(\d)$/i)
+    if (oa) return +oa[1] >= 1 && +oa[1] <= OVERFLOW_AISLE_COUNT ? `OA${+oa[1]}` : undefined
+    if (/^OVERFLOW$/i.test(m)) return 'OVERFLOW'
     const s = m.match(/^S(\d{1,2})$/i)
     if (s) return +s[1] >= 1 && +s[1] <= SECTION_COUNT ? `S${+s[1]}` : undefined
     const named = namedOfRef(squash(m))
@@ -339,7 +410,14 @@ export function zoneRef(zone: Pick<Zone, 'name' | 'mapRef'>): string | undefined
     return m
   }
   const name = zone.name.trim()
-  let m = name.match(/^sec(?:tion)?\.?\s*(\d{1,2})$/i)
+  // Overflow sections & aisles
+  let m = name.match(/^(?:overflow|ovf)\s*(?:sec(?:tion)?\.?\s*)?(\d{1,2})$/i) ?? name.match(/^sec(?:tion)?\.?\s*(\d{1,2})\s*\(?\s*(?:overflow|ovf)\s*\)?$/i)
+  if (m && +m[1] >= 1 && +m[1] <= OVERFLOW_SECTION_COUNT) return `OS${+m[1]}`
+  m = name.match(/^(?:overflow|ovf)\s*aisle\s*(\d)$/i) ?? name.match(/^aisle\s*(\d)\s*\(?\s*(?:overflow|ovf)\s*\)?$/i)
+  if (m && +m[1] >= 1 && +m[1] <= OVERFLOW_AISLE_COUNT) return `OA${+m[1]}`
+  if (/^(?:overflow|ovf)(?:\s+(?:area|hall|tent|canopy|seating|block))?$/i.test(name)) return 'OVERFLOW'
+
+  m = name.match(/^sec(?:tion)?\.?\s*(\d{1,2})$/i)
   if (m && +m[1] >= 1 && +m[1] <= SECTION_COUNT) return `S${+m[1]}`
   m = name.match(/^aisle\s*(\d)$/i)
   if (m && +m[1] >= 1 && +m[1] <= AISLE_COUNT) return `A${+m[1]}`
@@ -353,12 +431,24 @@ export function zoneRef(zone: Pick<Zone, 'name' | 'mapRef'>): string | undefined
   }
   const key = name.toLowerCase()
   const area = AREAS.find((a) => a.name.toLowerCase() === key || a.aliases?.some((x) => x.toLowerCase() === key))
-  return area?.ref
+  if (area) return area.ref
+  if (/\b(?:overflow|ovf)\b/i.test(name)) return 'OVERFLOW'
+  return undefined
 }
 
 export const sectionOfRef = (ref: string | undefined) => (ref && /^S\d+$/.test(ref) ? +ref.slice(1) : undefined)
+export const overflowSectionOfRef = (ref: string | undefined) => (ref && /^OS\d+$/.test(ref) ? +ref.slice(2) : undefined)
+export const overflowAisleOfRef = (ref: string | undefined) => (ref && /^OA\d+$/.test(ref) ? +ref.slice(2) : undefined)
+export const isOverflowRef = (ref: string | undefined) => !!ref && (ref === 'OVERFLOW' || /^OS\d+$/.test(ref) || /^OA\d+$/.test(ref))
+export const isOverflowZone = (zone: Pick<Zone, 'name' | 'mapRef'> | undefined) =>
+  !!zone && (isOverflowRef(zoneRef(zone)) || /\b(?:overflow|ovf)\b/i.test(zone.name))
 
 export function refRect(ref: string): Rect | undefined {
+  const os = overflowSectionOfRef(ref)
+  if (os) return overflowSectionRect(os)
+  const oa = overflowAisleOfRef(ref)
+  if (oa) return overflowAisleRect(oa)
+  if (ref === 'OVERFLOW') return OVERFLOW_PLAN.seating
   const n = sectionOfRef(ref)
   if (n) return sectionRect(n)
   if (/^A\d$/.test(ref)) return aisleRect(+ref.slice(1))
@@ -373,6 +463,14 @@ export function refRect(ref: string): Rect | undefined {
 export function zoneNote(zone: Pick<Zone, 'name' | 'mapRef'>): string | undefined {
   const ref = zoneRef(zone)
   if (!ref) return undefined
+  const os = overflowSectionOfRef(ref)
+  if (os) {
+    const { row, col } = overflowSectionCell(os)
+    return `Overflow · Row ${row + 1}, Column ${col + 1} (facing the LED screen)`
+  }
+  const oa = overflowAisleOfRef(ref)
+  if (oa) return `Overflow · Between columns ${oa} and ${oa + 1}`
+  if (ref === 'OVERFLOW') return 'Overflow · 20 seating sections (4 columns × 5 rows) facing the 12 m hanging LED screen'
   const n = sectionOfRef(ref)
   if (n) return [sectionNote(n), naveOf(n)].filter(Boolean).join(' · ')
   const named = namedOfRef(ref)

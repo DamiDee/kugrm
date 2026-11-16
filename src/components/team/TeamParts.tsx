@@ -4,29 +4,38 @@ import type { Member, Position, Zone, ZoneKind } from '@/data/types'
 import { coordinatorsFor, leadersForZone, type EventData } from '@/lib/selectors'
 import { cn, formatPhone, fullName, telHref } from '@/lib/utils'
 import { DUTY_LABEL, dutyOf } from '@/data/duties'
-import { SPOTS, doorRefOf, hasSpots, namedOfRef, sectionOfRef, zoneNote, zoneRef } from '@/data/venue'
+import { OVERFLOW_SPOTS, doorRefOf, hasSpots, namedOfRef, overflowSectionOfRef, sectionOfRef, spotsForSection, zoneNote, zoneRef } from '@/data/venue'
 
 /** "Sections 40–43, Sierra, Aisle 5, Door P13" from a list of zone names. */
 export function zoneSummary(names: string[] = []) {
   const secs = names.map((n) => n.match(/^Section (\d+)$/)?.[1]).filter(Boolean).map(Number).sort((a, b) => a - b)
-  const rest = names.filter((n) => !/^Section \d+$/.test(n))
-  const runs: string[] = []
-  for (let i = 0; i < secs.length; ) {
-    let j = i
-    while (j + 1 < secs.length && secs[j + 1] === secs[j] + 1) j++
-    runs.push(j > i ? `${secs[i]}–${secs[j]}` : `${secs[i]}`)
-    i = j + 1
+  const ovfSecs = names.map((n) => n.match(/^Overflow Section (\d+)$/)?.[1]).filter(Boolean).map(Number).sort((a, b) => a - b)
+  const rest = names.filter((n) => !/^Section \d+$/.test(n) && !/^Overflow Section \d+$/.test(n))
+  const buildRuns = (nums: number[]) => {
+    const runs: string[] = []
+    for (let i = 0; i < nums.length; ) {
+      let j = i
+      while (j + 1 < nums.length && nums[j + 1] === nums[j] + 1) j++
+      runs.push(j > i ? `${nums[i]}–${nums[j]}` : `${nums[i]}`)
+      i = j + 1
+    }
+    return runs
   }
-  const parts = runs.length ? [`Section${secs.length > 1 ? 's' : ''} ${runs.join(', ')}`] : []
+  const runs = buildRuns(secs)
+  const ovfRuns = buildRuns(ovfSecs)
+  const parts = [
+    ...(runs.length ? [`Section${secs.length > 1 ? 's' : ''} ${runs.join(', ')}`] : []),
+    ...(ovfRuns.length ? [`Overflow Section${ovfSecs.length > 1 ? 's' : ''} ${ovfRuns.join(', ')}`] : []),
+  ]
   return [...parts, ...rest].join(' · ') || 'No zones yet'
 }
 
 export function inferZoneKind(name: string): ZoneKind {
   const trimmed = name.trim()
-  if (/^sec(?:tion)?\.?\s*\d+$/i.test(trimmed)) return 'section'
+  if (/^(?:(?:overflow|ovf)\s*)?sec(?:tion)?\.?\s*\d+$/i.test(trimmed)) return 'section'
   const bare = trimmed.replace(/^(?:section|sec\.?)\s+/i, '').replace(/\s+section$/i, '').toUpperCase().replace(/[^A-Z0-9]/g, '')
   if (namedOfRef(bare)) return 'section'
-  if (/^aisle\s*\d+$/i.test(trimmed)) return 'aisle'
+  if (/^(?:(?:overflow|ovf)\s*)?aisle\s*\d+$/i.test(trimmed)) return 'aisle'
   const dm = trimmed.match(/^(?:door\s*)?([A-Z]{1,2}\d{1,2})\b/i)
   if (dm && doorRefOf(dm[1])) return 'door'
   return 'area'
@@ -72,9 +81,21 @@ export function useZoneRosters(data: EventData, zoneNames: Set<string>, members:
 
     return zones.map((zone) => {
       let positions = data.positionsByZone.get(zone.id) ?? []
-      const secNum = sectionOfRef(zoneRef(zone))
+      const ref = zoneRef(zone)
+      const secNum = sectionOfRef(ref)
+      const ovfSecNum = overflowSectionOfRef(ref)
       if (positions.length === 0 && secNum && hasSpots(secNum)) {
-        positions = SPOTS.map((sp, idx) => ({
+        positions = spotsForSection(secNum).map((sp, idx) => ({
+          id: `${zone.id}_${sp.key}`,
+          zoneId: zone.id,
+          name: sp.name,
+          order: idx + 1,
+          required: 1,
+          spot: sp.key,
+          duty: 'seat' as const,
+        }))
+      } else if (positions.length === 0 && ovfSecNum) {
+        positions = OVERFLOW_SPOTS.map((sp, idx) => ({
           id: `${zone.id}_${sp.key}`,
           zoneId: zone.id,
           name: sp.name,

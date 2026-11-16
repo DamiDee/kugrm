@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { toast } from '@/components/ui/Toast'
 import { VenueMap } from '@/components/venue/VenueMap'
-import { leadLabel } from '@/data/venue'
+import { isOverflowZone, leadLabel } from '@/data/venue'
 import { AssignmentCard, EventInfo, Notice, TeamMemberRow } from '@/components/public/AssignmentParts'
 import { PhoneLookup } from '@/components/public/PhoneLookup'
 import { PublicFooter } from '@/components/public/PublicShell'
@@ -245,7 +245,18 @@ function Found({ view }: { view: AssignmentView }) {
             <p className="text-sm text-ink-500">{current.position.spot ? 'Your usher seat is marked on the floor plan.' : `${current.zone.name} is highlighted on the floor plan.`}</p>
           </div>
         </div>
-        <VenueMap zones={eventZones} mode="locate" highlightZoneId={current.zone.id} highlightPositionId={current.position.id} info={mapInfo} positions={mapPositions} occupants={occupants} pinLabel={current.position.spot ? 'You stand here' : `You · ${current.position.name}`} />
+        <VenueMap
+          zones={eventZones}
+          mode="locate"
+          mapType={isOverflowZone(current.zone) || /\b(?:overflow|ovf)\b/i.test(current.position.name) ? 'overflow' : 'main'}
+          lockMapType
+          highlightZoneId={current.zone.id}
+          highlightPositionId={current.position.id}
+          info={mapInfo}
+          positions={mapPositions}
+          occupants={occupants}
+          pinLabel={current.position.spot ? 'You stand here' : `You · ${current.position.name}`}
+        />
       </motion.section>
 
       {current.event.instructions && (

@@ -1,5 +1,5 @@
 import type { Activity, AppNotification, Assignment, Duty, Member, MinistryEvent, Position, Zone } from './types'
-import { AISLE_COUNT, DOORS, NAMED_SECTIONS, SECTION_COUNT, SPOTS, hasSpots, naveOf, sectionCell, type DoorKind, type NamedStyle } from './venue'
+import { AISLE_COUNT, DOORS, NAMED_SECTIONS, OVERFLOW_AISLE_COUNT, OVERFLOW_SECTION_COUNT, OVERFLOW_SPOTS, SECTION_COUNT, spotsForSection, naveOf, sectionCell, type DoorKind, type NamedStyle } from './venue'
 
 /* Deterministic RNG so every fresh install sees the same demo roster. */
 function mulberry32(seed: number) {
@@ -25,11 +25,7 @@ export const AISLE_POSITIONS: PosSpec[] = [
   { name: 'Floor Marshal', required: 3, duty: 'crowd' },
 ]
 
-/** Back-column sections (73–84) and named front sections (5 rows each) have no corner usher seats. */
-const BACK_SECTION_POSITIONS: PosSpec[] = [
-  { name: 'Section Usher', required: 2, duty: 'seat' },
-]
-
+/** Named front sections (5 rows each) have no corner usher seats. */
 const NAMED_SECTION_POSITIONS: Record<NamedStyle, PosSpec[]> = {
   named: [{ name: 'Section Usher', required: 2, duty: 'seat' }],
   lady: [{ name: 'Section Protocol', required: 2, duty: 'protocol' }],
@@ -128,7 +124,7 @@ export function createSeed(): SeedState {
       unit: UNITS[i % UNITS.length], status: 'active', joinedYear: 2016 + (i % 9),
     })
   })
-  while (members.length < 1284) {
+  while (members.length < 1380) {
     const g: 'Male' | 'Female' = rnd() < 0.52 ? 'Female' : 'Male'
     const first = pick(g === 'Male' ? MALE : FEMALE)
     const last = pick(LAST)
@@ -168,6 +164,8 @@ export function createSeed(): SeedState {
   groups.push({ names: DOORS.filter((d) => d.ref.startsWith('C')).map((d) => `Door ${d.ref}`), leader: LEADERS.Doors, who: 'm5' })
   groups.push({ names: ['Door X1', 'Door X2', 'Door SE2', 'Door SE3', 'Door SE4', 'Covered Walkway', 'Rotunda'], leader: LEADERS.Doors })
   groups.push({ names: ['Registration Area', 'Car Park', 'Overflow', 'First Aid Point'], leader: LEADERS.Doors })
+  groups.push({ names: Array.from({ length: 10 }, (_, i) => `Overflow Section ${i + 1}`).concat(['Overflow Aisle 1', 'Overflow Aisle 2']), leader: LEADERS.Doors })
+  groups.push({ names: Array.from({ length: 10 }, (_, i) => `Overflow Section ${i + 11}`).concat(['Overflow Aisle 3']), leader: LEADERS.Doors })
   let ci = 13
   for (const g of groups) {
     let id = g.who
@@ -228,13 +226,16 @@ export function createSeed(): SeedState {
     for (let a = 1; a <= AISLE_COUNT; a++) addPos(zone(`a${a}`, `Aisle ${a}`, 'aisle', `A${a}`), AISLE_POSITIONS)
     for (let n = 1; n <= SECTION_COUNT; n++) {
       const z = zone(`s${n}`, `Section ${n}`, 'section', `S${n}`)
-      if (hasSpots(n))
-        SPOTS.forEach((sp, i) => positions.push({ id: `${z.id}_${sp.key}`, name: sp.name, zoneId: z.id, order: i, required: 1, spot: sp.key, duty: 'seat' }))
-      else addPos(z, BACK_SECTION_POSITIONS)
+      spotsForSection(n).forEach((sp, i) => positions.push({ id: `${z.id}_${sp.key}`, name: sp.name, zoneId: z.id, order: i, required: 1, spot: sp.key, duty: 'seat' }))
     }
     for (const ns of NAMED_SECTIONS) addPos(zone(`ns_${ns.ref.toLowerCase()}`, ns.name, 'section', ns.ref), NAMED_SECTION_POSITIONS[ns.style])
     for (const d of DOORS) addPos(zone(`d${d.ref}`, `Door ${d.ref}`, 'door', d.ref), DOOR_POSITIONS[d.kind])
     AREA_ZONES.forEach((ar, i) => addPos(zone(`z${i}`, ar.name, 'area', ar.ref), ar.positions))
+    for (let oa = 1; oa <= OVERFLOW_AISLE_COUNT; oa++) addPos(zone(`oa${oa}`, `Overflow Aisle ${oa}`, 'aisle', `OA${oa}`), AISLE_POSITIONS)
+    for (let on = 1; on <= OVERFLOW_SECTION_COUNT; on++) {
+      const z = zone(`os${on}`, `Overflow Section ${on}`, 'section', `OS${on}`)
+      OVERFLOW_SPOTS.forEach((sp, i) => positions.push({ id: `${z.id}_${sp.key}`, name: sp.name, zoneId: z.id, order: i, required: 1, spot: sp.key, duty: 'seat' }))
+    }
   }
   const posById = new Map(positions.map((p) => [p.id, p]))
 

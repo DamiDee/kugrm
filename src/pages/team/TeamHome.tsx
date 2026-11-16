@@ -11,6 +11,7 @@ import { Logo } from '@/components/ui/misc'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { VenueMap } from '@/components/venue/VenueMap'
+import { isOverflowZone } from '@/data/venue'
 import { Absences } from '@/components/admin/Absences'
 import { ZoneRosterCard, useZoneRosters, zoneSummary, type ZoneRoster } from '@/components/team/TeamParts'
 
@@ -198,9 +199,22 @@ function TeamMap({ data, rosters, memberMap, onSelect }: { data: EventData; rost
   const positions = positionsOf(data)
   const occupants = spotOccupants(data, memberMap, ids)
   const uncovered = uncoveredSpots(data, memberMap)
+  const hasOverflow = rosterZones.some((z) => isOverflowZone(z))
+  const hasMain = rosterZones.some((z) => !isOverflowZone(z))
+  const onlyOneMap = (hasOverflow && !hasMain) || (hasMain && !hasOverflow)
   return (
     <section className="surface p-4 sm:p-5" aria-label="Your zones on the floor plan">
-      <VenueMap zones={zones} mode="coverage" info={info} positions={positions} occupants={occupants} uncovered={uncovered} onSelect={onSelect} />
+      <VenueMap
+        zones={zones}
+        mode="coverage"
+        mapType={hasOverflow && !hasMain ? 'overflow' : 'main'}
+        lockMapType={onlyOneMap}
+        info={info}
+        positions={positions}
+        occupants={occupants}
+        uncovered={uncovered}
+        onSelect={onSelect}
+      />
     </section>
   )
 }

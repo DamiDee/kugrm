@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { animate, motion, useInView } from 'framer-motion'
 import { ChevronDown, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -165,30 +166,60 @@ export function Checkbox({ checked, indeterminate, onChange, label }: { checked:
   )
 }
 
-/** Small anchored popover used for menus and the notification centre. */
+/** Small anchored popover used for menus and the notification centre. Rendered in a portal so parent overflow-hidden containers never clip it. */
 export function Popover({ trigger, children, align = 'right', className }: { trigger: (p: { open: boolean; toggle: () => void }) => React.ReactNode; children: (close: () => void) => React.ReactNode; align?: 'left' | 'right'; className?: string }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [coords, setCoords] = useState<{ top: number; left?: number; right?: number } | null>(null)
+
+  useLayoutEffect(() => {
+    if (!open || !ref.current) return
+    const updatePosition = () => {
+      const el = ref.current
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      setCoords({
+        top: r.bottom + 8,
+        ...(align === 'right' ? { right: Math.max(8, window.innerWidth - r.right) } : { left: Math.max(8, r.left) }),
+      })
+    }
+    updatePosition()
+    window.addEventListener('scroll', updatePosition, true)
+    window.addEventListener('resize', updatePosition)
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true)
+      window.removeEventListener('resize', updatePosition)
+    }
+  }, [open, align])
+
   useEffect(() => {
     if (!open) return
-    const h = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false)
+    const h = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (!ref.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false)
+    }
     const k = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
     document.addEventListener('mousedown', h)
     document.addEventListener('keydown', k)
     return () => { document.removeEventListener('mousedown', h); document.removeEventListener('keydown', k) }
   }, [open])
+
   return (
     <div ref={ref} className="relative">
       {trigger({ open, toggle: () => setOpen((o) => !o) })}
-      {open && (
+      {open && coords && createPortal(
         <motion.div
+          ref={menuRef}
           initial={{ opacity: 0, y: -4, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.15 }}
-          className={cn('absolute top-full z-30 mt-2 origin-top rounded-xl border border-line bg-white shadow-lift', align === 'right' ? 'right-0' : 'left-0', className)}
+          style={{ position: 'fixed', top: coords.top, left: coords.left, right: coords.right }}
+          className={cn('z-[80] origin-top rounded-xl border border-line bg-white shadow-lift', className)}
         >
           {children(() => setOpen(false))}
-        </motion.div>
+        </motion.div>,
+        document.body,
       )}
     </div>
   )
