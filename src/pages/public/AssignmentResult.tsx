@@ -5,7 +5,8 @@ import { ArrowLeft, CalendarClock, CalendarX2, ChevronDown, Crown, History, Hour
 import { useStore } from '@/store/useStore'
 import { LIVE, type ApiError } from '@/lib/api'
 import { availableLive, confirmLive, lookupLive, useLiveMap } from '@/lib/live'
-import { lookupByPhone, positionsOf, spotOccupants, useEventData, useMemberMap, type AssignmentView, type LookupResult, type SessionEntry } from '@/lib/selectors'
+import { lookupByPhone, memberRoleZones, positionsOf, spotOccupants, useEventData, useMemberMap, type AssignmentView, type LookupResult, type SessionEntry } from '@/lib/selectors'
+import { zoneSummary } from '@/components/team/TeamParts'
 import { cn, eventLabel, formatDate, formatPhone, formatShortDate, formatTime, fullName, sessionLine, sessionShort, telHref, SESSION_LABEL } from '@/lib/utils'
 import { Logo, Segmented } from '@/components/ui/misc'
 import { Button } from '@/components/ui/Button'
@@ -99,8 +100,11 @@ function MemberSessions({ result }: { result: Extract<LookupResult, { kind: 'mem
   const { member, sessions, others } = result
   const [params, setParams] = useSearchParams()
   const activeEventId = useStore((s) => s.activeEventId)
+  const allMembers = useStore((s) => s.members)
+  const isLeadership = member.role === 'coordinator' || member.role === 'leader'
+  const roleZones = useMemo(() => (isLeadership ? memberRoleZones(member, allMembers.length ? allMembers : [member]) : []), [isLeadership, member, allMembers])
   const fallback =
-    sessions.find((x) => x.view && x.event.date >= today())?.event.id ??
+    sessions.find((x) => (x.view || isLeadership) && x.event.date >= today())?.event.id ??
     sessions.find((x) => x.event.id === activeEventId)?.event.id ??
     sessions[0]?.event.id
   const selectedId = sessions.some((x) => x.event.id === params.get('s')) ? params.get('s')! : fallback
@@ -117,7 +121,18 @@ function MemberSessions({ result }: { result: Extract<LookupResult, { kind: 'mem
     <div className="space-y-6">
       <motion.div {...fade}>
         <p className="text-sm text-ink-500">Welcome back</p>
-        <h1 className="mt-1 text-[30px] font-semibold tracking-[-0.025em] text-ink-900 sm:text-[34px]">Hello, {member.firstName} <span aria-hidden>👋</span></h1>
+        <div className="mt-1 flex flex-wrap items-center gap-2.5">
+          <h1 className="text-[30px] font-semibold tracking-[-0.025em] text-ink-900 sm:text-[34px]">Hello, {member.firstName} <span aria-hidden>👋</span></h1>
+          {isLeadership && (
+            <span className={cn(
+              'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ring-1',
+              member.role === 'leader' ? 'bg-gold-100 text-gold-700 ring-gold-300/60' : 'bg-wine-50 text-wine-700 ring-wine-200/80',
+            )}>
+              <Crown className="h-3.5 w-3.5 shrink-0" />
+              {member.role === 'leader' ? 'Leader' : 'Section Coordinator'}
+            </span>
+          )}
+        </div>
         {event && (
           <p className="mt-1.5 text-[15px] text-ink-500">
             {event.name}{event.series && sessions.length > 1 ? `, ${formatDate(sessions[0].event.date, { day: 'numeric' })}–${formatDate(sessions[sessions.length - 1].event.date, { day: 'numeric', month: 'long', year: 'numeric' })}` : `, ${formatDate(event.date)}`}
@@ -125,7 +140,7 @@ function MemberSessions({ result }: { result: Extract<LookupResult, { kind: 'mem
         )}
       </motion.div>
 
-      {sessions.length > 1 && <SessionPicker sessions={sessions} value={selectedId} onChange={pickSession} />}
+      {sessions.length > 1 && <SessionPicker sessions={sessions} value={selectedId} onChange={pickSession} roleBadge={isLeadership ? (member.role === 'leader' ? 'Leader' : 'Coord') : undefined} />}
 
       {event && event.rosterStatus !== 'published' ? (
         <StatePanel
@@ -135,6 +150,53 @@ function MemberSessions({ result }: { result: Extract<LookupResult, { kind: 'mem
           body="This session’s roster hasn’t been published yet. Check back closer to the day."
           event={event}
         />
+      ) : event && !view && isLeadership ? (
+        <motion.section {...fade} transition={{ ...fade.transition, delay: 0.08 }} className="surface overflow-hidden">
+          <div className="flex flex-col items-start gap-5 p-6 sm:flex-row sm:p-8">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gold-100 text-gold-700 ring-1 ring-gold-300/60">
+              <Crown className="h-6 w-6" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-ok-50 px-2.5 text-xs font-medium text-ok-600 ring-1 ring-inset ring-ok-500/20">
+                  <span className="h-1.5 w-1.5 rounded-full bg-ok-500" />Assigned
+                </span>
+                <span className={cn(
+                  'inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold ring-1 ring-inset',
+                  member.role === 'leader' ? 'bg-gold-100 text-gold-700 ring-gold-300/60' : 'bg-wine-50 text-wine-700 ring-wine-200/80',
+                )}>
+                  <Crown className="h-3.5 w-3.5 shrink-0" />
+                  {member.role === 'leader' ? 'Leader' : 'Section Coordinator'}
+                </span>
+              </div>
+              <h2 className="mt-3 text-xl font-semibold tracking-tight text-ink-900">
+                {roleZones.length > 0 ? zoneSummary(roleZones) : `${member.role === 'leader' ? 'Leader' : 'Coordinator'} for ${sessionShort(event)}`}
+              </h2>
+              <p className="mt-1.5 max-w-lg text-[15px] leading-relaxed text-ink-500">
+                You are serving as a {member.role === 'leader' ? 'leader' : 'section coordinator'} for {sessionShort(event)}. Sign in to the Team Portal to view all your sections, ushers, and attendance in real time.
+              </p>
+              {roleZones.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {roleZones.map((zn) => (
+                    <span key={zn} className="inline-flex items-center gap-1 rounded-lg bg-paper px-2.5 py-1 text-xs font-medium text-ink-800 ring-1 ring-line">
+                      <Crown className="h-3 w-3 shrink-0 text-gold-600" />
+                      {zn}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="mt-5 flex flex-wrap gap-2">
+                <Link to="/team" className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-ink-900 px-4 text-sm font-medium text-white shadow-soft hover:bg-ink-800">
+                  <Crown className="h-4 w-4 text-gold-300" /> Open Team Portal
+                </Link>
+              </div>
+            </div>
+          </div>
+          <div className="border-t border-line bg-paper px-6 py-5 sm:px-8">
+            <div className="eyebrow mb-1">{sessionLine(event) || 'Event'}</div>
+            <EventInfo event={event} />
+          </div>
+        </motion.section>
       ) : event && !view ? (
         <StatePanel
           icon={<Hourglass className="h-6 w-6" />}
@@ -154,13 +216,13 @@ function MemberSessions({ result }: { result: Extract<LookupResult, { kind: 'mem
   )
 }
 
-function SessionPicker({ sessions, value, onChange }: { sessions: SessionEntry[]; value?: string; onChange: (id: string) => void }) {
+function SessionPicker({ sessions, value, onChange, roleBadge }: { sessions: SessionEntry[]; value?: string; onChange: (id: string) => void; roleBadge?: string }) {
   return (
     <nav aria-label="Sessions" className="-mx-4 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0">
       <ul className="flex gap-2">
         {sessions.map(({ event, view }) => {
           const on = event.id === value
-          const state = event.rosterStatus !== 'published' ? 'Soon' : !view ? 'Off' : view.assignment.status === 'unavailable' ? 'Away' : view.zone.name.replace('Section ', 'Sec ')
+          const state = event.rosterStatus !== 'published' ? 'Soon' : !view ? (roleBadge ?? 'Off') : view.assignment.status === 'unavailable' ? 'Away' : view.zone.name.replace('Section ', 'Sec ')
           return (
             <li key={event.id} className="shrink-0">
               <button
@@ -199,11 +261,19 @@ function Found({ view }: { view: AssignmentView }) {
   const live = useContext(LiveCtx)
   const liveMap = useLiveMap(current.event.id, current.position, current.teammates)
   const eventZones = LIVE ? liveMap.zones : zones.filter((z) => z.eventId === current.event.id)
+  const isOverflow = isOverflowZone(current.zone) || /\b(?:overflow|ovf)\b/i.test(current.position.name)
   const demoOccupants = useMemo(() => spotOccupants(data, memberMap, current.zone.id), [data, memberMap, current.zone.id])
-  const occupants = LIVE ? liveMap.occupants : demoOccupants
+  const youMember = useMemo(() => current.teammates.find((t) => t.isYou)?.member, [current.teammates])
+  const overflowSelfOccupants = useMemo<Record<string, string>>(
+    () => ({ [current.position.id]: youMember ? fullName(youMember) : 'You' }),
+    [current.position.id, youMember],
+  )
+  // For someone assigned to Overflow, show only that person and hide other people's details
+  const occupants = isOverflow ? overflowSelfOccupants : (LIVE ? liveMap.occupants : demoOccupants)
   const mapPositions = LIVE ? liveMap.positions : positionsOf(data)
-  // the server already leaves out teammates who can't make it
-  const team = LIVE ? current.teammates : current.teammates.filter((t) => t.isYou || data.assignments.some((a) => a.memberId === t.member.id))
+  // the server already leaves out teammates who can't make it; for Overflow, show only the logged-in person
+  const rawTeam = LIVE ? current.teammates : current.teammates.filter((t) => t.isYou || data.assignments.some((a) => a.memberId === t.member.id))
+  const team = isOverflow ? rawTeam.filter((t) => t.isYou) : rawTeam
   const confirm = async () => {
     try {
       if (LIVE) { await confirmLive(current.assignment.id, live.phone); await live.reload() } else confirmAssignment(current.assignment.id)

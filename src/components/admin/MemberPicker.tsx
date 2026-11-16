@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronsUpDown, Search } from 'lucide-react'
+import { Check, ChevronsUpDown, Crown, Search } from 'lucide-react'
 import { useStore } from '@/store/useStore'
-import type { EventData } from '@/lib/selectors'
+import { memberRoleZones, type EventData } from '@/lib/selectors'
+import { zoneSummary } from '@/components/team/TeamParts'
 import { cn, formatPhone, fullName, normalizePhone } from '@/lib/utils'
 import { Avatar } from '@/components/ui/Avatar'
 
@@ -25,11 +26,12 @@ export function MemberPicker({ value, onChange, data, autoFocus, onlyUnassigned 
   const results = useMemo(() => {
     const t = q.trim().toLowerCase()
     const d = normalizePhone(q)
+    const isAssigned = (m: typeof members[number]) => data.byMember.has(m.id) || m.role === 'coordinator' || m.role === 'leader'
     return members
       .filter((m) => m.status === 'active')
-      .filter((m) => !onlyUnassigned || !data.byMember.has(m.id))
+      .filter((m) => !onlyUnassigned || !isAssigned(m))
       .filter((m) => !t || fullName(m).toLowerCase().includes(t) || (d.length >= 3 && m.phone.includes(d)) || m.memberId?.toLowerCase().includes(t))
-      .sort((a, b) => Number(data.byMember.has(a.id)) - Number(data.byMember.has(b.id)))
+      .sort((a, b) => Number(isAssigned(a)) - Number(isAssigned(b)))
       .slice(0, 40)
   }, [q, members, data.byMember, onlyUnassigned])
 
@@ -74,6 +76,8 @@ export function MemberPicker({ value, onChange, data, autoFocus, onlyUnassigned 
               const a = data.byMember.get(m.id)
               const z = a && data.zoneById.get(a.zoneId)
               const p = a && data.positionById.get(a.positionId)
+              const isLeadership = m.role === 'coordinator' || m.role === 'leader'
+              const roleLabel = isLeadership ? `${m.role === 'leader' ? 'Leader' : 'Coordinator'} · ${zoneSummary(memberRoleZones(m, members))}` : ''
               return (
                 <li key={m.id}>
                   <button type="button" role="option" aria-selected={m.id === value} onMouseMove={() => setIdx(i)} onClick={() => pick(m.id)} className={cn('flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left', i === idx && 'bg-paper')}>
@@ -82,7 +86,9 @@ export function MemberPicker({ value, onChange, data, autoFocus, onlyUnassigned 
                       <span className="block truncate text-sm text-ink-900">{fullName(m)}</span>
                       <span className="block truncate text-xs text-ink-500 tabular">{formatPhone(m.phone)} · {m.unit}</span>
                     </span>
-                    <span className={cn('shrink-0 text-xs', z ? 'text-ink-500' : 'font-medium text-warn-600')}>{z ? `${z.name} · ${p?.name}` : 'Unassigned'}</span>
+                    <span className={cn('max-w-[200px] shrink-0 truncate text-xs', z ? 'text-ink-500' : isLeadership ? 'inline-flex items-center gap-1 font-medium text-wine-700' : 'font-medium text-warn-600')} title={roleLabel || undefined}>
+                      {z ? `${z.name} · ${p?.name}` : isLeadership ? <><Crown className="h-3 w-3 shrink-0 text-gold-600" /><span className="truncate">{roleLabel}</span></> : 'Unassigned'}
+                    </span>
                     {m.id === value && <Check className="h-4 w-4 text-wine-600" />}
                   </button>
                 </li>

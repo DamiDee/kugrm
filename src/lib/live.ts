@@ -6,7 +6,7 @@ import type { Assignment, FallbackKeyResponse, Member, MinistryEvent, Position, 
 import { SPOTS } from '@/data/venue'
 import { LIVE, api, ApiError, setOnSignedOut, setOnTeamSignedOut, tokens } from './api'
 import { normalizePhone } from './utils'
-import { coordinatorsFor, leadersForMember, leadersForZone, type LookupResult } from './selectors'
+import { coordinatorsFor, leadersForMember, leadersForZone, parseVirtualPositionId, parseVirtualZoneId, type LookupResult } from './selectors'
 
 /**
  * Connects the store to the backend. Screens keep reading the store: it is
@@ -153,10 +153,41 @@ function push(call: () => Promise<unknown>, touches: Dirty = {}) {
     .finally(() => { if (--pending === 0) void refresh() })
 }
 
-const eventOfZone = (zoneId: string) => get().zones.find((z) => z.id === zoneId)?.eventId
-const eventOfPosition = (id: string) => eventOfZone(get().positions.find((p) => p.id === id)?.zoneId ?? '')
+const eventOfZone = (zoneId: string) => get().zones.find((z) => z.id === zoneId)?.eventId ?? parseVirtualZoneId(zoneId)?.eventId
+const eventOfPosition = (id: string) => eventOfZone(get().positions.find((p) => p.id === id)?.zoneId ?? parseVirtualPositionId(id)?.zoneId ?? '')
 const eventOfAssignment = (id: string) => get().assignments.find((a) => a.id === id)?.eventId
 const admin = { as: 'admin' as const }
+
+/**
+ * Ensures a virtual zone (e.g. Section 84 or Overflow Section 1–20 on an older server event)
+ * and/or virtual spot position (e.g. Front row, left end / Front row, right end on Sections 73–84)
+ * exists on the backend before saving an assignment, returning the real server zoneId & positionId.
+ */
+async function resolveRealZoneAndPosition(eventId: string, zoneId: string, positionId: string): Promise<{ zoneId: string; positionId: string }> {
+  let realZoneId = zoneId
+  const vz = parseVirtualZoneId(zoneId)
+  if (vz) {
+    const existingZone = get().zones.find((z) => z.eventId === eventId && !z.id.startsWith('vzone__') && z.name.trim().toLowerCase() === vz.name.toLowerCase())
+    if (existingZone) {
+      realZoneId = existingZone.id
+    } else {
+      const created: any = await api(`/events/${eventId}/zones`, { ...admin, method: 'POST', body: { name: vz.name, kind: vz.kind } })
+      realZoneId = created.id
+    }
+  }
+  let realPosId = positionId
+  const vp = parseVirtualPositionId(positionId)
+  if (vp) {
+    const existingPos = get().positions.find((p) => p.zoneId === realZoneId && !p.id.startsWith('vpos__') && (p.spot === vp.spot || p.name.trim().toLowerCase() === vp.name.toLowerCase()))
+    if (existingPos) {
+      realPosId = existingPos.id
+    } else {
+      const createdPos: any = await api(`/zones/${realZoneId}/positions`, { ...admin, method: 'POST', body: { name: vp.name, required: 1 } })
+      realPosId = createdPos.id
+    }
+  }
+  return { zoneId: realZoneId, positionId: realPosId }
+}
 
 function installActions() {
   const o = get()
@@ -216,11 +247,21 @@ function installActions() {
 
     assign: (a) => {
       o.assign(a)
-      push(() => api(`/events/${a.eventId}/assignments`, { ...admin, method: 'POST', body: { memberId: a.memberId, zoneId: a.zoneId, positionId: a.positionId, isTeamLead: !!a.isTeamLead, replace: true } }), { roster: a.eventId })
+      push(async () => {
+        const { zoneId, positionId } = await resolveRealZoneAndPosition(a.eventId, a.zoneId, a.positionId)
+        await api(`/events/${a.eventId}/assignments`, { ...admin, method: 'POST', body: { memberId: a.memberId, zoneId, positionId, isTeamLead: !!a.isTeamLead, replace: true } })
+      }, { roster: a.eventId })
     },
     removeAssignment: (id) => { const roster = eventOfAssignment(id); o.removeAssignment(id); push(() => api(`/assignments/${id}`, { ...admin, method: 'DELETE' }), { roster }) },
     removeAssignmentsFor: (ids, eventId) => { const n = o.removeAssignmentsFor(ids, eventId); push(() => api(`/events/${eventId}/assignments/bulk-remove`, { ...admin, method: 'POST', body: { memberIds: ids } }), { roster: eventId }); return n },
-    bulkAssign: (ids, eventId, zoneId, positionId) => { const n = o.bulkAssign(ids, eventId, zoneId, positionId); push(() => api(`/events/${eventId}/assignments/bulk`, { ...admin, method: 'POST', body: { memberIds: ids, zoneId, positionId } }), { roster: eventId }); return n },
+    bulkAssign: (ids, eventId, zoneId, positionId) => {
+      const n = o.bulkAssign(ids, eventId, zoneId, positionId)
+      push(async () => {
+        const resolved = await resolveRealZoneAndPosition(eventId, zoneId, positionId)
+        await api(`/events/${eventId}/assignments/bulk`, { ...admin, method: 'POST', body: { memberIds: ids, zoneId: resolved.zoneId, positionId: resolved.positionId } })
+      }, { roster: eventId })
+      return n
+    },
     moveToEvent: (ids, from, to) => { const n = o.moveToEvent(ids, from, to); push(() => api(`/events/${from}/assignments/copy`, { ...admin, method: 'POST', body: { toEventId: to, memberIds: ids } }), { roster: to }); return n },
     copyRoster: (from, to) => {
       const n = new Set(get().assignments.filter((a) => a.eventId === from).map((a) => a.memberId)).size

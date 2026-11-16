@@ -3,7 +3,8 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowLeftRight, Crown, Filter, MapPin, Plus, SearchX, Trash2, Upload, UserMinus, Users } from 'lucide-react'
 import { useStore } from '@/store/useStore'
-import { useEventData } from '@/lib/selectors'
+import { memberRoleZones, useEventData } from '@/lib/selectors'
+import { zoneSummary } from '@/components/team/TeamParts'
 import { useFirstLoad } from '@/lib/hooks'
 import { cn, formatPhone, fullName, normalizePhone } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
@@ -51,15 +52,29 @@ export default function Members() {
     const list = members
       .map((m) => {
         const a = data.byMember.get(m.id)
-        return { m, a, z: a && data.zoneById.get(a.zoneId), p: a && data.positionById.get(a.positionId) }
+        const roleZones = memberRoleZones(m, members)
+        const isLeadership = m.role === 'coordinator' || m.role === 'leader'
+        return {
+          m,
+          a,
+          z: a && data.zoneById.get(a.zoneId),
+          p: a && data.positionById.get(a.positionId),
+          isLeadership,
+          roleZones,
+          roleSummary: isLeadership ? zoneSummary(roleZones) : '',
+        }
       })
       .filter(({ m }) => !t || fullName(m).toLowerCase().includes(t) || (d.length >= 3 && m.phone.includes(d)) || m.memberId?.toLowerCase().includes(t))
-      .filter(({ a, m }) => status === 'all' || (status === 'assigned' ? !!a : !a))
-      .filter(({ z }) => !zone || z?.id === zone)
+      .filter(({ a, isLeadership }) => status === 'all' || (status === 'assigned' ? (!!a || isLeadership) : (!a && !isLeadership)))
+      .filter(({ z, roleZones }) => {
+        if (!zone) return true
+        const targetZoneName = data.zoneById.get(zone)?.name
+        return z?.id === zone || (!!targetZoneName && roleZones.includes(targetZoneName))
+      })
       .filter(({ p }) => !position || p?.name === position)
     const dir = sort.dir === 'asc' ? 1 : -1
     const key = (r: (typeof list)[number]) =>
-      sort.key === 'name' ? fullName(r.m) : sort.key === 'phone' ? r.m.phone : sort.key === 'unit' ? r.m.unit ?? '' : sort.key === 'gender' ? r.m.gender ?? '' : sort.key === 'assignment' ? (r.z ? `${String(r.z.order).padStart(3, '0')}${r.p?.order}` : 'zzz') : r.m.status
+      sort.key === 'name' ? fullName(r.m) : sort.key === 'phone' ? r.m.phone : sort.key === 'unit' ? r.m.unit ?? '' : sort.key === 'gender' ? r.m.gender ?? '' : sort.key === 'assignment' ? (r.z ? `${String(r.z.order).padStart(3, '0')}${r.p?.order}` : r.isLeadership ? `000_${r.m.role}_${r.roleSummary}` : 'zzz') : r.m.status
     return list.sort((x, y) => key(x).localeCompare(key(y)) * dir)
   }, [members, data, q, status, zone, position, sort])
 
@@ -136,7 +151,7 @@ export default function Members() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
-                  {pageRows.map(({ m, a, z, p }) => {
+                  {pageRows.map(({ m, a, z, p, isLeadership, roleSummary }) => {
                     const sel = selected.has(m.id)
                     return (
                       <tr key={m.id} onClick={() => openMember(m.id)} className={cn('cursor-pointer transition-colors', sel ? 'bg-wine-50/50' : 'hover:bg-paper')}>
@@ -144,15 +159,60 @@ export default function Members() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
                             <Avatar first={m.firstName} last={m.lastName} size="sm" />
-                            <div className="min-w-0"><div className="truncate font-medium text-ink-900">{fullName(m)}</div><div className="text-xs text-ink-400">{m.memberId}</div></div>
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="truncate font-medium text-ink-900">{fullName(m)}</span>
+                                {m.role === 'leader' && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-gold-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gold-700 ring-1 ring-gold-300/60">
+                                    <Crown className="h-3 w-3 shrink-0" /> Leader
+                                  </span>
+                                )}
+                                {m.role === 'coordinator' && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-wine-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-wine-700 ring-1 ring-wine-200/80">
+                                    <Crown className="h-3 w-3 shrink-0 text-wine-600" /> Coordinator
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-ink-400">{m.memberId}</div>
+                            </div>
                           </div>
                         </td>
                         <td className="px-4 py-3 text-ink-700 tabular">{formatPhone(m.phone)}</td>
                         <td className="hidden px-4 py-3 text-ink-600 xl:table-cell">{m.gender ?? '—'}</td>
                         <td className="hidden px-4 py-3 text-ink-600 lg:table-cell">{m.unit}</td>
-                        <td className="px-4 py-3">{z ? <span className="flex items-center gap-1.5 text-ink-900">{a?.isTeamLead && <Crown className="h-3.5 w-3.5 text-gold-600" />}<span className="font-medium">{z.name}</span><span className="text-ink-400">·</span><span className="text-ink-600">{p?.name}</span></span> : <span className="text-ink-400">—</span>}</td>
-                        <td className="hidden px-4 py-3 text-ink-600 xl:table-cell">{a ? ev?.code : '—'}</td>
-                        <td className="px-4 py-3">{m.status === 'inactive' ? <StatusBadge status="inactive" /> : a ? <StatusBadge status={a.status} /> : <StatusBadge status="unassigned" />}</td>
+                        <td className="px-4 py-3">
+                          {z ? (
+                            <div className="space-y-1">
+                              <span className="flex items-center gap-1.5 text-ink-900">
+                                {a?.isTeamLead && <Crown className="h-3.5 w-3.5 text-gold-600" />}
+                                <span className="font-medium">{z.name}</span>
+                                <span className="text-ink-400">·</span>
+                                <span className="text-ink-600">{p?.name}</span>
+                              </span>
+                              {isLeadership && roleSummary && roleSummary !== 'No zones yet' && (
+                                <div className="flex items-center gap-1 text-xs text-ink-500">
+                                  <Crown className="h-3 w-3 shrink-0 text-gold-600" />
+                                  <span className="truncate max-w-[260px]" title={roleSummary}>Oversees {roleSummary}</span>
+                                </div>
+                              )}
+                            </div>
+                          ) : isLeadership ? (
+                            <div className="flex flex-wrap items-center gap-1.5 text-ink-900">
+                              <span className={cn(
+                                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1',
+                                m.role === 'leader' ? 'bg-gold-100/80 text-gold-700 ring-gold-300/60' : 'bg-wine-50 text-wine-700 ring-wine-200/80',
+                              )}>
+                                <Crown className="h-3 w-3 shrink-0" />
+                                {m.role === 'leader' ? 'Leader' : 'Coordinator'}
+                              </span>
+                              <span className="max-w-[280px] truncate font-medium text-ink-800" title={roleSummary}>{roleSummary}</span>
+                            </div>
+                          ) : (
+                            <span className="text-ink-400">—</span>
+                          )}
+                        </td>
+                        <td className="hidden px-4 py-3 text-ink-600 xl:table-cell">{a || isLeadership ? ev?.code : '—'}</td>
+                        <td className="px-4 py-3">{m.status === 'inactive' ? <StatusBadge status="inactive" /> : a ? <StatusBadge status={a.status} /> : isLeadership ? <StatusBadge status="assigned" /> : <StatusBadge status="unassigned" />}</td>
                       </tr>
                     )
                   })}
@@ -161,16 +221,29 @@ export default function Members() {
             </div>
             {/* mobile cards */}
             <ul className="divide-y divide-line md:hidden">
-              {pageRows.map(({ m, a, z, p }) => (
+              {pageRows.map(({ m, a, z, p, isLeadership, roleSummary }) => (
                 <li key={m.id} className={cn('flex items-center gap-3 px-4 py-3', selected.has(m.id) && 'bg-wine-50/50')}>
                   <Checkbox checked={selected.has(m.id)} onChange={() => toggle(m.id)} label={`Select ${fullName(m)}`} />
                   <button onClick={() => openMember(m.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
                     <Avatar first={m.firstName} last={m.lastName} size="sm" />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium text-ink-900">{fullName(m)}</span>
-                      <span className="block truncate text-xs text-ink-500 tabular">{formatPhone(m.phone)} · {z ? `${z.name} · ${p?.name}` : 'Unassigned'}</span>
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <span className="break-words font-medium text-ink-900">{fullName(m)}</span>
+                        {isLeadership && (
+                          <span className={cn(
+                            'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1',
+                            m.role === 'leader' ? 'bg-gold-100 text-gold-700 ring-gold-300/60' : 'bg-wine-50 text-wine-700 ring-wine-200/80',
+                          )}>
+                            <Crown className="h-2.5 w-2.5 shrink-0" />
+                            {m.role === 'leader' ? 'Leader' : 'Coordinator'}
+                          </span>
+                        )}
+                      </span>
+                      <span className="mt-0.5 block break-words text-xs text-ink-500 tabular">
+                        {formatPhone(m.phone)} · {z ? `${z.name} · ${p?.name}` : isLeadership ? roleSummary : 'Unassigned'}
+                      </span>
                     </span>
-                    {a ? <StatusBadge status={a.status} /> : <StatusBadge status="unassigned" />}
+                    {a ? <StatusBadge status={a.status} /> : isLeadership ? <StatusBadge status="assigned" /> : <StatusBadge status="unassigned" />}
                   </button>
                 </li>
               ))}

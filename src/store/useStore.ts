@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import type { Activity, AdminRole, AppNotification, Assignment, Member, MemberRole, MinistryEvent, Position, Zone, ZoneKind } from '@/data/types'
 import { createSeed } from '@/data/mock'
+import { parseVirtualPositionId, parseVirtualZoneId } from '@/lib/selectors'
 import { eventLabel, normalizePhone, uid } from '@/lib/utils'
 import { LIVE } from '@/lib/api'
 
@@ -247,11 +248,25 @@ export const useStore = create<State>()(
 
       assign: ({ memberId, eventId, zoneId, positionId, isTeamLead = false }) => {
         set((s) => {
+          let zones = s.zones
+          let positions = s.positions
+          const vz = parseVirtualZoneId(zoneId)
+          if (vz && !zones.some((z) => z.id === zoneId)) {
+            zones = [...zones, { id: zoneId, name: vz.name, eventId: vz.eventId, kind: vz.kind, order: vz.order, mapRef: vz.ref }]
+          }
+          const vp = parseVirtualPositionId(positionId)
+          if (vp && !positions.some((p) => p.id === positionId)) {
+            positions = [...positions, { id: positionId, name: vp.name, zoneId: vp.zoneId, order: vp.order, required: 1, spot: vp.spot, duty: 'seat' }]
+          }
           // an usher spot holds one person, so whoever stood there is moved off it
-          const onSpot = !!s.positions.find((p) => p.id === positionId)?.spot
+          const onSpot = !!positions.find((p) => p.id === positionId)?.spot
           let assignments = s.assignments.filter((a) => !(a.eventId === eventId && (a.memberId === memberId || (onSpot && a.positionId === positionId))))
           if (isTeamLead) assignments = assignments.map((a) => (a.zoneId === zoneId && a.isTeamLead ? { ...a, isTeamLead: false } : a))
-          return { assignments: [...assignments, { id: uid('as'), memberId, eventId, zoneId, positionId, isTeamLead, status: 'assigned', updatedAt: new Date().toISOString() }] }
+          return {
+            zones,
+            positions,
+            assignments: [...assignments, { id: uid('as'), memberId, eventId, zoneId, positionId, isTeamLead, status: 'assigned', updatedAt: new Date().toISOString() }],
+          }
         })
         const s = get()
         const m = s.members.find((x) => x.id === memberId)
@@ -276,12 +291,26 @@ export const useStore = create<State>()(
       bulkAssign: (memberIds, eventId, zoneId, positionId) => {
         const ids = new Set(memberIds)
         const now = new Date().toISOString()
-        set((s) => ({
-          assignments: [
-            ...s.assignments.filter((a) => !(a.eventId === eventId && ids.has(a.memberId))),
-            ...memberIds.map((memberId) => ({ id: uid('as'), memberId, eventId, zoneId, positionId, isTeamLead: false, status: 'assigned' as const, updatedAt: now })),
-          ],
-        }))
+        set((s) => {
+          let zones = s.zones
+          let positions = s.positions
+          const vz = parseVirtualZoneId(zoneId)
+          if (vz && !zones.some((z) => z.id === zoneId)) {
+            zones = [...zones, { id: zoneId, name: vz.name, eventId: vz.eventId, kind: vz.kind, order: vz.order, mapRef: vz.ref }]
+          }
+          const vp = parseVirtualPositionId(positionId)
+          if (vp && !positions.some((p) => p.id === positionId)) {
+            positions = [...positions, { id: positionId, name: vp.name, zoneId: vp.zoneId, order: vp.order, required: 1, spot: vp.spot, duty: 'seat' }]
+          }
+          return {
+            zones,
+            positions,
+            assignments: [
+              ...s.assignments.filter((a) => !(a.eventId === eventId && ids.has(a.memberId))),
+              ...memberIds.map((memberId) => ({ id: uid('as'), memberId, eventId, zoneId, positionId, isTeamLead: false, status: 'assigned' as const, updatedAt: now })),
+            ],
+          }
+        })
         const z = get().zones.find((x) => x.id === zoneId)
         get().log(`assigned ${memberIds.length} ushers to ${z?.name}`, 'assign')
         return memberIds.length
@@ -360,6 +389,6 @@ export const useStore = create<State>()(
     }),
     LIVE
       ? { name: 'grm-live-v1', storage: createJSONStorage(() => safeStorage), version: 1, partialize: (s) => ({ admin: s.admin }) as unknown as State }
-      : { name: 'grm-store-v6', storage: createJSONStorage(() => safeStorage), version: 1 },
+      : { name: 'grm-store-v7', storage: createJSONStorage(() => safeStorage), version: 1 },
   ),
 )

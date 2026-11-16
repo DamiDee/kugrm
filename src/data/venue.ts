@@ -163,13 +163,18 @@ export const SPOTS: { key: SpotKey; name: string }[] = [
   { key: 'BL', name: 'Back row, left end' },
   { key: 'BR', name: 'Back row, right end' },
 ]
-/** Sections 73–84 on the main floor and Sections 1–20 in Overflow have two usher seats: Front row, left end & Back row, right end. */
+/** Sections 73–84 on the main floor have two usher seats on the front row: Front row, left end & Front row, right end. */
+export const BACK_SPOTS: { key: SpotKey; name: string }[] = [
+  { key: 'FL', name: 'Front row, left end' },
+  { key: 'FR', name: 'Front row, right end' },
+]
+/** Sections 1–20 in Overflow have two usher seats: Front row, left end & Back row, right end. */
 export const TWO_SPOTS: { key: SpotKey; name: string }[] = [
   { key: 'FL', name: 'Front row, left end' },
   { key: 'BR', name: 'Back row, right end' },
 ]
 export const spotName = (k: SpotKey) => SPOTS.find((s) => s.key === k)!.name
-export const spotsForSection = (n: number) => (n >= 1 && n <= SPOT_SECTION_MAX ? SPOTS : n > SPOT_SECTION_MAX && n <= SECTION_COUNT ? TWO_SPOTS : [])
+export const spotsForSection = (n: number) => (n >= 1 && n <= SPOT_SECTION_MAX ? SPOTS : n > SPOT_SECTION_MAX && n <= SECTION_COUNT ? BACK_SPOTS : [])
 export const hasSpots = (n: number) => n >= 1 && n <= SECTION_COUNT
 export function spotPoint(n: number, k: SpotKey) {
   const r = sectionRect(n)

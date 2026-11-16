@@ -1104,13 +1104,15 @@ export function VenueMap({
               </>
             )}
 
-            {/* usher seats: 4 per section on 1–72, 2 per section (FL & BR) on 73–84 and on Overflow 1–20 */}
+            {/* usher seats: 4 per section on 1–72, 2 per section (FL & FR) on 73–84, and 2 per section (FL & BR) on Overflow 1–20 */}
             {spots.map((sp) => {
               const p = P.pt(sp.x, sp.y)
-              const who = sp.positionId ? occupants?.[sp.positionId] : undefined
-              const away = !who && sp.positionId ? uncovered?.[sp.positionId] : undefined
               const mine = !!sp.positionId && sp.positionId === highlightPositionId
-              const filled = mode === 'plain' ? true : (sp.filledByZoneCount ?? !!who)
+              // In Overflow locate mode (for the person assigned to Overflow), show only that person and hide other people's details
+              const hideOthersInOverflow = isOverflow && mode === 'locate' && !mine
+              const who = hideOthersInOverflow ? undefined : (sp.positionId ? occupants?.[sp.positionId] : undefined)
+              const away = hideOthersInOverflow ? undefined : (!who && sp.positionId ? uncovered?.[sp.positionId] : undefined)
+              const filled = mode === 'plain' ? true : hideOthersInOverflow ? false : (sp.filledByZoneCount ?? !!who)
               const targetPosId = sp.positionId ?? sp.fallbackPositionId
               const tappable = !!(onSelectSpot && sp.zoneId && targetPosId) || !!(onSelect && sp.zoneId)
               const hov = hoverSpot === sp.key
@@ -1131,7 +1133,7 @@ export function VenueMap({
                     onKeyDown: (e: React.KeyboardEvent) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), handleSpotActivate(e)),
                     className: 'cursor-pointer outline-none',
                   } : {})}
-                  onMouseEnter={() => setHoverSpot(sp.key)}
+                  onMouseEnter={() => { if (!hideOthersInOverflow) setHoverSpot(sp.key) }}
                   onMouseLeave={() => setHoverSpot((h) => (h === sp.key ? null : h))}
                 >
                   {tappable && <circle cx={p.x} cy={p.y} r={isOverflow ? 15 : 13} fill="transparent" />}

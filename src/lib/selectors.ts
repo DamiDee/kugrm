@@ -1,7 +1,31 @@
 import { useMemo } from 'react'
 import { useStore } from '@/store/useStore'
-import type { Assignment, Member, MinistryEvent, Position, Zone } from '@/data/types'
+import type { Assignment, Member, MinistryEvent, Position, SpotKey, Zone } from '@/data/types'
+import { OVERFLOW_AISLE_COUNT, OVERFLOW_SECTION_COUNT, OVERFLOW_SPOTS, SECTION_COUNT, SPOTS, overflowSectionOfRef, sectionOfRef, spotName, spotsForSection, zoneRef } from '@/data/venue'
 import { normalizePhone, sessionOrder } from './utils'
+
+export function parseVirtualZoneId(zoneId: string): { eventId: string; ref: string; name: string; kind: Zone['kind']; order: number } | undefined {
+  const m = zoneId.match(/^vzone__(.+)__([A-Z0-9]+)$/)
+  if (!m) return undefined
+  const [, eventId, ref] = m
+  const sec = sectionOfRef(ref)
+  if (sec) return { eventId, ref, name: `Section ${sec}`, kind: 'section', order: 9 + sec }
+  const ovfSec = overflowSectionOfRef(ref)
+  if (ovfSec) return { eventId, ref, name: `Overflow Section ${ovfSec}`, kind: 'section', order: 200 + ovfSec }
+  if (/^OA\d$/.test(ref)) {
+    const a = +ref.slice(2)
+    return { eventId, ref, name: `Overflow Aisle ${a}`, kind: 'aisle', order: 190 + a }
+  }
+  return undefined
+}
+
+export function parseVirtualPositionId(positionId: string): { zoneId: string; spot: SpotKey; name: string; order: number } | undefined {
+  const m = positionId.match(/^vpos__(.+)__(FL|FR|BL|BR)$/)
+  if (!m) return undefined
+  const spot = m[2] as SpotKey
+  const order = SPOTS.findIndex((s) => s.key === spot)
+  return { zoneId: m[1], spot, name: spotName(spot), order: order >= 0 ? order : 0 }
+}
 
 export interface ZoneStat {
   zone: Zone
@@ -35,7 +59,34 @@ export function computeEventData(
   s: { events: MinistryEvent[]; zones: Zone[]; positions: Position[]; assignments: Assignment[]; members: Member[] },
 ): EventData {
   const event = s.events.find((e) => e.id === eventId)
-  const zones = s.zones.filter((z) => z.eventId === eventId).sort((a, b) => a.order - b.order)
+  const rawZones = s.zones.filter((z) => z.eventId === eventId)
+  const zones: Zone[] = [...rawZones]
+
+  // If the event has zones loaded (e.g. from the server where an older template only had 83 sections),
+  // ensure Section 1–84, Overflow Section 1–20, and Overflow Aisle 1–3 are available and assignable.
+  if (rawZones.length > 0) {
+    const existingRefs = new Set(rawZones.map((z) => zoneRef(z)).filter(Boolean))
+    for (let n = 1; n <= SECTION_COUNT; n++) {
+      const ref = `S${n}`
+      if (!existingRefs.has(ref)) {
+        zones.push({ id: `vzone__${eventId}__${ref}`, name: `Section ${n}`, eventId, kind: 'section', order: 9 + n, mapRef: ref })
+      }
+    }
+    for (let oa = 1; oa <= OVERFLOW_AISLE_COUNT; oa++) {
+      const ref = `OA${oa}`
+      if (!existingRefs.has(ref)) {
+        zones.push({ id: `vzone__${eventId}__${ref}`, name: `Overflow Aisle ${oa}`, eventId, kind: 'aisle', order: 190 + oa, mapRef: ref })
+      }
+    }
+    for (let on = 1; on <= OVERFLOW_SECTION_COUNT; on++) {
+      const ref = `OS${on}`
+      if (!existingRefs.has(ref)) {
+        zones.push({ id: `vzone__${eventId}__${ref}`, name: `Overflow Section ${on}`, eventId, kind: 'section', order: 200 + on, mapRef: ref })
+      }
+    }
+  }
+  zones.sort((a, b) => a.order - b.order)
+
   const zoneIds = new Set(zones.map((z) => z.id))
   const zoneById = new Map(zones.map((z) => [z.id, z]))
   const positionsByZone = new Map<string, Position[]>()
@@ -47,6 +98,35 @@ export function computeEventData(
     arr.push(p)
     positionsByZone.set(p.zoneId, arr)
   }
+
+  // Ensure every section 1–84 and Overflow section 1–20 has its required usher seat positions
+  for (const z of zones) {
+    const ref = zoneRef(z)
+    const secNum = sectionOfRef(ref)
+    const ovfSecNum = overflowSectionOfRef(ref)
+    if (!secNum && !ovfSecNum) continue
+    const expectedSpots = secNum ? spotsForSection(secNum) : OVERFLOW_SPOTS
+    const arr = positionsByZone.get(z.id) ?? []
+    for (let i = 0; i < expectedSpots.length; i++) {
+      const sp = expectedSpots[i]
+      const has = arr.some((p) => p.spot === sp.key || p.name.trim().toLowerCase() === sp.name.toLowerCase())
+      if (!has) {
+        const vp: Position = {
+          id: `vpos__${z.id}__${sp.key}`,
+          name: sp.name,
+          zoneId: z.id,
+          order: i,
+          required: 1,
+          spot: sp.key,
+          duty: 'seat',
+        }
+        arr.push(vp)
+        positionById.set(vp.id, vp)
+      }
+    }
+    positionsByZone.set(z.id, arr)
+  }
+
   positionsByZone.forEach((arr) => arr.sort((a, b) => a.order - b.order))
   const memberById = new Map(s.members.map((m) => [m.id, m]))
   const all = s.assignments.filter((a) => a.eventId === eventId && memberById.has(a.memberId))
@@ -74,7 +154,13 @@ export function computeEventData(
       leaders,
     }
   })
-  const assigned = byMember.size
+  const assignedMemberIds = new Set(byMember.keys())
+  for (const m of s.members) {
+    if (m.status === 'active' && (m.role === 'coordinator' || m.role === 'leader')) {
+      assignedMemberIds.add(m.id)
+    }
+  }
+  const assigned = assignedMemberIds.size
   const required = zoneStats.reduce((n, z) => n + z.required, 0)
   return {
     event, zones, positionsByZone, positionById, zoneById, assignments, unavailable, byMember, byZone, zoneStats,
@@ -299,6 +385,15 @@ export function leaderIdsOf(m: Member): string[] {
 /** What a coordinator or leader can see: the zones they oversee and, for a leader, their coordinators. */
 export function teamScope(me: Member, members: Member[]) {
   const coordinators = me.role === 'leader' ? members.filter((m) => m.role === 'coordinator' && leaderIdsOf(m).includes(me.id)) : me.role === 'coordinator' ? [me] : []
-  const zoneNames = new Set(coordinators.flatMap((c) => c.coordinates ?? []))
+  const zoneNames = new Set([
+    ...(me.coordinates ?? []),
+    ...coordinators.flatMap((c) => c.coordinates ?? []),
+  ])
   return { coordinators, zoneNames }
+}
+
+/** Returns the list of zones/sections a coordinator or leader handles. */
+export function memberRoleZones(m: Member, members: Member[]): string[] {
+  if (m.role !== 'coordinator' && m.role !== 'leader') return []
+  return [...teamScope(m, members).zoneNames]
 }
