@@ -318,6 +318,7 @@ function Found({ view }: { view: AssignmentView }) {
         <VenueMap
           zones={eventZones}
           mode="locate"
+          hideLegend
           mapType={isOverflowZone(current.zone) || /\b(?:overflow|ovf)\b/i.test(current.position.name) ? 'overflow' : 'main'}
           lockMapType
           highlightZoneId={current.zone.id}

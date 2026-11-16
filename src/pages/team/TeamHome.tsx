@@ -207,6 +207,7 @@ function TeamMap({ data, rosters, memberMap, onSelect }: { data: EventData; rost
       <VenueMap
         zones={zones}
         mode="coverage"
+        hideLegend
         mapType={hasOverflow && !hasMain ? 'overflow' : 'main'}
         lockMapType={onlyOneMap}
         info={info}
