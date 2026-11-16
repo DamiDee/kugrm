@@ -7,7 +7,8 @@ import { LIVE, type ApiError } from '@/lib/api'
 import { availableLive, confirmLive, lookupLive, useLiveMap } from '@/lib/live'
 import { lookupByPhone, memberRoleZones, positionsOf, spotOccupants, useEventData, useMemberMap, type AssignmentView, type LookupResult, type SessionEntry } from '@/lib/selectors'
 import { zoneSummary } from '@/components/team/TeamParts'
-import { cn, eventLabel, formatDate, formatPhone, formatShortDate, formatTime, fullName, sessionLine, sessionShort, telHref, SESSION_LABEL } from '@/lib/utils'
+import { cn, eventLabel, formatDate, formatPhone, formatShortDate, formatTime, fullName, normalizePhone, sessionLine, sessionShort, telHref, SESSION_LABEL } from '@/lib/utils'
+import { canBypassDeviceLock, getLockedDevicePhone, setLockedDevicePhone } from '@/lib/deviceLock'
 import { Logo, Segmented } from '@/components/ui/misc'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -26,27 +27,40 @@ const LiveCtx = createContext<{ phone: string; reload: () => Promise<void> }>({ 
 export default function AssignmentResult() {
   const [params] = useSearchParams()
   const phone = params.get('phone') ?? ''
+  const normalizedPhone = normalizePhone(phone)
   const navigate = useNavigate()
+  const admin = useStore((s) => s.admin)
+  const bypassLock = canBypassDeviceLock(admin)
+  const lockedPhone = bypassLock ? null : getLockedDevicePhone()
+  const blockedByDeviceLock = !!lockedPhone && !!normalizedPhone && normalizedPhone !== lockedPhone
+
   // re-run the lookup whenever roster data changes (e.g. after confirming)
   const assignments = useStore((s) => s.assignments)
   const events = useStore((s) => s.events)
   const activeEventId = useStore((s) => s.activeEventId)
   const members = useStore((s) => s.members)
   const [ready, setReady] = useState(false)
-  const demoResult = useMemo<LookupResult | null>(() => (!LIVE && phone ? lookupByPhone(phone) : null), [phone, assignments, events, activeEventId, members])
+  const demoResult = useMemo<LookupResult | null>(() => (!LIVE && phone && !blockedByDeviceLock ? lookupByPhone(phone) : null), [phone, blockedByDeviceLock, assignments, events, activeEventId, members])
   const [liveResult, setLiveResult] = useState<LookupResult | null>(null)
   const [liveError, setLiveError] = useState('')
   const reload = useCallback(async () => {
+    if (blockedByDeviceLock) return
     try {
       setLiveResult(await lookupLive(phone))
       setLiveError('')
     } catch (e) {
       setLiveError((e as Error).message)
     }
-  }, [phone])
-  useEffect(() => { if (LIVE && phone) void reload() }, [phone, reload])
+  }, [phone, blockedByDeviceLock])
+  useEffect(() => { if (LIVE && phone && !blockedByDeviceLock) void reload() }, [phone, blockedByDeviceLock, reload])
   const result = LIVE ? liveResult : demoResult
   const live = useMemo(() => ({ phone, reload }), [phone, reload])
+
+  useEffect(() => {
+    if (!bypassLock && result?.kind === 'member' && normalizedPhone) {
+      setLockedDevicePhone(normalizedPhone)
+    }
+  }, [bypassLock, result, normalizedPhone])
 
   useEffect(() => {
     if (!phone) navigate('/', { replace: true })
@@ -65,7 +79,20 @@ export default function AssignmentResult() {
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-4 pb-10 pt-6 sm:px-6 sm:pt-10">
-        {liveError ? (
+        {blockedByDeviceLock ? (
+          <div className="surface p-8 text-center">
+            <h1 className="text-xl font-semibold tracking-tight text-ink-900">One search per device</h1>
+            <p className="mx-auto mt-2 max-w-md text-[15px] text-ink-500">
+              This device is already linked to <span className="font-semibold text-ink-900 tabular">{formatPhone(lockedPhone!)}</span>. Checking a different phone number is not allowed on this device.
+            </p>
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              <Button variant="primary" onClick={() => navigate(`/assignment?phone=${encodeURIComponent(lockedPhone!)}`, { replace: true })}>
+                View {formatPhone(lockedPhone!)}
+              </Button>
+              <Button variant="secondary" onClick={() => navigate('/')}>Back to home</Button>
+            </div>
+          </div>
+        ) : liveError ? (
           <div className="surface p-8 text-center">
             <h1 className="text-xl font-semibold tracking-tight text-ink-900">We couldn’t check the roster</h1>
             <p className="mt-2 text-[15px] text-ink-500">{liveError}</p>

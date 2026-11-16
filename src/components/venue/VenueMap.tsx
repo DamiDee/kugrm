@@ -319,12 +319,19 @@ export function VenueMap({
   const spots = useMemo(() => {
     const posByZoneSpot = new Map<string, Position>()
     const listByZone = new Map<string, Position[]>()
+    const unspottedByZone = new Map<string, Position[]>()
     for (const p of positions ?? []) {
       const arr = listByZone.get(p.zoneId) ?? []
       arr.push(p)
       listByZone.set(p.zoneId, arr)
       const spotKey = p.spot ?? SPOTS.find((s) => s.name.toLowerCase() === p.name.trim().toLowerCase())?.key
-      if (spotKey) posByZoneSpot.set(`${p.zoneId}_${spotKey}`, p)
+      if (spotKey) {
+        posByZoneSpot.set(`${p.zoneId}_${spotKey}`, p)
+      } else {
+        const uArr = unspottedByZone.get(p.zoneId) ?? []
+        uArr.push(p)
+        unspottedByZone.set(p.zoneId, uArr)
+      }
     }
     const out: {
       key: string
@@ -349,10 +356,11 @@ export function VenueMap({
         const z = useGeneral ? generalOvf : (exactZone ?? generalOvf)
         const zoneName = useGeneral ? generalOvf.name : (exactZone?.name ?? `Overflow Section ${n}`)
         const zPositions = useGeneral ? generalPositions : (exactZone ? (listByZone.get(exactZone.id) ?? []) : generalPositions)
+        const zUnspotted = !useGeneral && exactZone ? (unspottedByZone.get(exactZone.id) ?? []) : []
         const fallback = zPositions[0]
         const assignedInZone = z ? (info[z.id]?.assigned ?? 0) : 0
         OVERFLOW_SPOTS.forEach((sp, idx) => {
-          const exactPos = !useGeneral && exactZone ? (posByZoneSpot.get(`${exactZone.id}_${sp.key}`) ?? zPositions[idx]) : undefined
+          const exactPos = !useGeneral && exactZone ? (posByZoneSpot.get(`${exactZone.id}_${sp.key}`) ?? zUnspotted[idx]) : undefined
           const singleMultiPos = zPositions.length === 1 && (zPositions[0].required ?? 0) > 1
           out.push({
             key: `${ref}_${sp.key}`,
@@ -377,11 +385,12 @@ export function VenueMap({
       const z = byRef.get(ref)
       const zoneName = z?.name ?? `Section ${n}`
       const zPositions = z ? (listByZone.get(z.id) ?? []) : []
+      const zUnspotted = z ? (unspottedByZone.get(z.id) ?? []) : []
       const fallback = zPositions[0]
       const assignedInZone = z ? (info[z.id]?.assigned ?? 0) : 0
       const secSpots = spotsForSection(n)
       secSpots.forEach((sp, idx) => {
-        const p = z ? (posByZoneSpot.get(`${z.id}_${sp.key}`) ?? zPositions[idx]) : undefined
+        const p = z ? (posByZoneSpot.get(`${z.id}_${sp.key}`) ?? zUnspotted[idx]) : undefined
         const singleMultiPos = zPositions.length === 1 && (zPositions[0].required ?? 0) > 1
         out.push({
           key: `${ref}_${sp.key}`,
@@ -697,13 +706,14 @@ export function VenueMap({
                   const ref = `OS${n}`
                   const r = overflowSectionRect(n)
                   const focus = isFocus(ref)
+                  const muted = mode === 'locate' && !!highlightRef && highlightRef !== ref
                   const edgeOn = focus || hover === ref
-                  const badge = mode === 'coverage' ? tone(coverageOf(ref)).solid : '#0F1E36'
+                  const badge = muted ? '#9CA3AF' : mode === 'coverage' ? tone(coverageOf(ref)).solid : '#0F1E36'
                   const cx = r.x + r.w / 2
                   const cy = r.y + r.h / 2
                   return (
-                    <g key={ref} {...hit(ref, `Overflow Section ${n}`)}>
-                      {R(r, { fill: '#285CE4', stroke: edgeOn ? '#111827' : '#1E40AF', strokeWidth: edgeOn ? 4 : 2, rx: 1.5 })}
+                    <g key={ref} {...hit(ref, `Overflow Section ${n}`)} opacity={muted ? 0.55 : 1}>
+                      {R(r, { fill: muted ? '#D1D5DB' : '#285CE4', stroke: edgeOn ? '#111827' : muted ? '#9CA3AF' : '#1E40AF', strokeWidth: edgeOn ? 4 : 2, rx: 1.5 })}
                       {R({ x: r.x + 2, y: r.y + 2, w: r.w - 4, h: r.h - 4 }, { fill: 'url(#grm-ovf-seats)', pointerEvents: 'none' })}
                       {(() => {
                         const p = P.pt(cx, cy)
@@ -850,16 +860,17 @@ export function VenueMap({
                   const r = sectionRect(n)
                   const col = PLAIN[sectionStyle(n)]
                   const focus = isFocus(ref)
+                  const muted = mode === 'locate' && !!highlightRef && highlightRef !== ref
                   const edgeOn = focus || hover === ref
-                  const badge = mode === 'coverage' ? tone(coverageOf(ref)).solid : '#0B0D12'
+                  const badge = muted ? '#9CA3AF' : mode === 'coverage' ? tone(coverageOf(ref)).solid : '#0B0D12'
                   const cx = r.x + r.w / 2
                   const cy = r.y + r.h / 2
                   const narrow = n > SPOT_SECTION_MAX
                   const rad = narrow ? 14.5 : 16.5
                   return (
-                    <g key={ref} {...hit(ref, `Section ${n}`)}>
-                      {isOuterSection(n) && R({ x: r.x - 3, y: r.y - 4, w: r.w + 6, h: r.h + 8 }, { fill: 'none', stroke: '#F08A1C', strokeWidth: 1.6, strokeDasharray: '5 4', pointerEvents: 'none' })}
-                      {R(r, { fill: col.fill, stroke: edgeOn ? '#111827' : col.edge, strokeWidth: edgeOn ? 4 : 1.5, rx: 2 })}
+                    <g key={ref} {...hit(ref, `Section ${n}`)} opacity={muted ? 0.5 : 1}>
+                      {isOuterSection(n) && !muted && R({ x: r.x - 3, y: r.y - 4, w: r.w + 6, h: r.h + 8 }, { fill: 'none', stroke: '#F08A1C', strokeWidth: 1.6, strokeDasharray: '5 4', pointerEvents: 'none' })}
+                      {R(r, { fill: muted ? '#D1D5DB' : col.fill, stroke: edgeOn ? '#111827' : muted ? '#9CA3AF' : col.edge, strokeWidth: edgeOn ? 4 : 1.5, rx: 2 })}
                       {R({ x: r.x + 2.5, y: r.y + 2.5, w: r.w - 5, h: r.h - 5 }, { fill: 'url(#grm-seats)', pointerEvents: 'none' })}
                       {(() => {
                         const p = P.pt(cx, cy)
@@ -902,16 +913,17 @@ export function VenueMap({
                   const r = ns.rect
                   const col = NAMED_PLAIN[ns.style]
                   const focus = isFocus(ns.ref)
+                  const muted = mode === 'locate' && !!highlightRef && highlightRef !== ns.ref
                   const edgeOn = focus || hover === ns.ref
-                  const tagFill = mode === 'coverage' ? tone(coverageOf(ns.ref)).solid : '#0B0D12'
+                  const tagFill = muted ? '#9CA3AF' : mode === 'coverage' ? tone(coverageOf(ns.ref)).solid : '#0B0D12'
                   const seatW = 58
                   const seatRect: Rect = { x: r.x, y: r.y, w: seatW, h: r.h }
                   const tagRect: Rect = { x: r.x + seatW + 2, y: r.y + 5, w: 18, h: r.h - 10 }
                   const cy = r.y + r.h / 2
                   const tagCx = tagRect.x + tagRect.w / 2
                   return (
-                    <g key={ns.ref} {...hit(ns.ref, `${ns.name} Section`)}>
-                      {R(seatRect, { fill: col.fill, stroke: edgeOn ? '#111827' : col.edge, strokeWidth: edgeOn ? 3.5 : 1.5, rx: 2 })}
+                    <g key={ns.ref} {...hit(ns.ref, `${ns.name} Section`)} opacity={muted ? 0.5 : 1}>
+                      {R(seatRect, { fill: muted ? '#D1D5DB' : col.fill, stroke: edgeOn ? '#111827' : muted ? '#9CA3AF' : col.edge, strokeWidth: edgeOn ? 3.5 : 1.5, rx: 2 })}
                       {R({ x: seatRect.x + 2, y: seatRect.y + 2, w: seatRect.w - 4, h: seatRect.h - 4 }, { fill: 'url(#grm-seats-named)', pointerEvents: 'none' })}
 
                       {/* special front-row strips & pills on Echo, Delta, Charlie, Bravo */}
@@ -1128,6 +1140,8 @@ export function VenueMap({
             {spots.map((sp) => {
               const p = P.pt(sp.x, sp.y)
               const mine = !!sp.positionId && sp.positionId === highlightPositionId
+              // In locate mode (regular members), only show usher dots on the member's own highlighted section
+              if (mode === 'locate' && highlightZoneId && sp.zoneId !== highlightZoneId && !mine) return null
               // In Overflow locate mode (for the person assigned to Overflow), show only that person and hide other people's details
               const hideOthersInOverflow = isOverflow && mode === 'locate' && !mine
               const who = hideOthersInOverflow ? undefined : (sp.positionId ? occupants?.[sp.positionId] : undefined)

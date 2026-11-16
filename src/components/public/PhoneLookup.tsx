@@ -2,10 +2,14 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowRight, Phone, Search } from 'lucide-react'
-import { cn, formatPhoneInput, isValidPhone, normalizePhone } from '@/lib/utils'
+import { useStore } from '@/store/useStore'
+import { canBypassDeviceLock, getLockedDevicePhone } from '@/lib/deviceLock'
+import { cn, formatPhone, formatPhoneInput, isValidPhone, normalizePhone } from '@/lib/utils'
 
 export function PhoneLookup({ initial = '', className, onDark = true, tga = false }: { initial?: string; className?: string; onDark?: boolean; /** gold button, for the TGA landing page */ tga?: boolean }) {
-  const [value, setValue] = useState(formatPhoneInput(initial))
+  const admin = useStore((s) => s.admin)
+  const lockedPhone = canBypassDeviceLock(admin) ? null : getLockedDevicePhone()
+  const [value, setValue] = useState(formatPhoneInput(initial || lockedPhone || ''))
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
@@ -16,6 +20,9 @@ export function PhoneLookup({ initial = '', className, onDark = true, tga = fals
     const digits = normalizePhone(value)
     if (!digits) return setError('Enter the phone number you registered with the department.')
     if (!isValidPhone(digits)) return setError('That doesn’t look like a phone number. Use 11 digits for a Nigerian number (0801 234 5678), or include the country code for others (+44 7911 123456).')
+    if (lockedPhone && digits !== lockedPhone) {
+      return setError(`This device is already linked to ${formatPhone(lockedPhone)}. Only one assignment search is allowed per device.`)
+    }
     setError('')
     setLoading(true)
     // the lookup is instant; a short pause lets the scanning state register without feeling slow
